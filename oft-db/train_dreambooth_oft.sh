@@ -163,9 +163,6 @@ export OUTPUT_DIR="log_cot/${name}"
 export INSTANCE_DIR="../data/dreambooth/${selected_subject}"
 export CLASS_DIR="data/class_data/${class_token}"
 
-. /home/zqiu/miniconda3/etc/profile.d/conda.sh
-conda activate oft
-
 accelerate launch train_dreambooth_oft.py \
   --pretrained_model_name_or_path=$MODEL_NAME  \
   --instance_data_dir=$INSTANCE_DIR \
@@ -176,20 +173,23 @@ accelerate launch train_dreambooth_oft.py \
   --class_prompt="$class_prompt" \
   --resolution=512 \
   --train_batch_size=1 \
-  --gradient_accumulation_steps=1 \
+  --gradient_accumulation_steps=1 --gradient_checkpointing \
   --checkpointing_steps=5000 \
   --learning_rate=6e-5 \
   --report_to="wandb" \
   --lr_scheduler="constant" \
   --lr_warmup_steps=0 \
-  --max_train_steps=2005 \
+  --max_train_steps=1000 \
   --validation_prompt="$validation_prompt" \
   --validation_epochs=1 \
   --seed="0" \
   --name="$name" \
-  --num_class_images=200 \
+  --num_class_images=20 \
   --eps=$eps \
   --rank=$rank \
+  --enable_xformers_memory_efficient_attention \
+  --use_8bit_adam \
+  --set_grads_to_none \
 # --coft
 #   --test_prompt="$test_prompt" \
 #   --eps=6e-5 \
