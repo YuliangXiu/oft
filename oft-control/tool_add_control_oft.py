@@ -6,8 +6,9 @@ Original Author: Lvmin Zhang
 License: Apache License 2.0
 """
 
-import sys
 import os
+import sys
+
 os.environ['HF_HOME'] = '/tmp'
 
 # assert len(sys.argv) == 3, 'Args are wrong.'
@@ -17,11 +18,17 @@ os.environ['HF_HOME'] = '/tmp'
 
 import torch
 from oldm.hack import disable_verbosity
-disable_verbosity()
-from oldm.model import create_model
-from oft import inject_trainable_oft, inject_trainable_oft_conv, inject_trainable_oft_extended
 
+disable_verbosity()
 import argparse
+
+from oldm.model import create_model
+
+from oft import (
+    inject_trainable_oft,
+    inject_trainable_oft_conv,
+    inject_trainable_oft_extended,
+)
 
 parser = argparse.ArgumentParser()
 
@@ -51,7 +58,9 @@ def get_node_name(name, parent_name):
 model = create_model(config_path='./configs/oft_ldm_v15.yaml')
 model.model.requires_grad_(False)
 
-unet_lora_params, train_names = inject_trainable_oft(model.model, r=args.r, eps=args.eps, is_coft=args.coft, block_share=args.block_share)
+unet_lora_params, train_names = inject_trainable_oft(
+    model.model, r=args.r, eps=args.eps, is_coft=args.coft, block_share=args.block_share
+)
 # unet_lora_params, train_names = inject_trainable_oft_conv(model.model, r=args.r, eps=args.eps, is_coft=args.coft, block_share=args.block_share)
 # unet_lora_params, train_names = inject_trainable_oft_extended(model.model, r=args.r, eps=args.eps, is_coft=args.coft, block_share=args.block_share)
 

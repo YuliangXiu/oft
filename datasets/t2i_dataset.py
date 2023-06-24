@@ -1,13 +1,13 @@
+import json
+import os
+
+import cv2
+import numpy as np
 import torch
+from PIL import Image
+from pycocotools.coco import COCO
 from torch.utils.data import Dataset
 from torchvision import transforms
-
-from pycocotools.coco import COCO
-import os
-import numpy as np
-from PIL import Image
-import json
-import cv2
 
 
 class RescaleToMinusOneToOne:
@@ -49,7 +49,7 @@ class COCOStuffDataset(Dataset):
         file = self.files[index]
         name = file['name']
         print('name info', name)
-        sys.exit()
+        # sys.exit()
         image = Image.open(os.path.join(self.root_dir, self.set_name, image_info['file_name']))
         image = np.array(image)
 
@@ -75,13 +75,14 @@ class COCOStuffDataset(Dataset):
 
         h, w = self.coco.imgs[image_id]["height"], self.coco.imgs[image_id]["width"]
         segmentation_map = np.zeros((h, w), dtype=np.int32)
-        
+
         for ann in annotations:
             category_id = ann["category_id"]
             mask = self.coco.annToMask(ann)
             segmentation_map[mask == 1] = category_id
 
         return segmentation_map
+
 
 class COCOStuffDataset1(Dataset):
     def __init__(self, root_dir, set_name, transforms=None):
@@ -118,10 +119,11 @@ class COCOStuffDataset1(Dataset):
 
         return image, seg_map
 
+
 class Fill50kDataset(Dataset):
     def __init__(self):
         self.data = []
-        with open('./training/fill50k/prompt.json', 'rt') as f: # fill50k, COCO
+        with open('./training/fill50k/prompt.json', 'rt') as f:    # fill50k, COCO
             for line in f:
                 self.data.append(json.loads(line))
 
@@ -145,7 +147,7 @@ class Fill50kDataset(Dataset):
 
         target = np.transpose(target, (2, 0, 1))
         source = np.expand_dims(source, axis=0)
-        
+
         # Normalize source images to [0, 1].
         source /= 255.0
 
@@ -159,7 +161,7 @@ class CocoSketchDataset(Dataset):
     def __init__(self, split='train2017'):
         self.data = []
         self.split = split
-        with open('./training/COCO/{}/prompt.json'.format(split), 'rt') as f: # fill50k, COCO
+        with open('./training/COCO/{}/prompt.json'.format(split), 'rt') as f:    # fill50k, COCO
             for line in f:
                 self.data.append(json.loads(line))
 
@@ -183,8 +185,12 @@ class CocoSketchDataset(Dataset):
         target_filename = item['target']
         prompt = item['prompt']
 
-        source_path = os.path.join('./training/COCO/{}/sketch/'.format(self.split), source_filename[7:])
-        target_path = os.path.join('./training/COCO/{}/color/'.format(self.split), target_filename[7:])
+        source_path = os.path.join(
+            './training/COCO/{}/sketch/'.format(self.split), source_filename[7:]
+        )
+        target_path = os.path.join(
+            './training/COCO/{}/color/'.format(self.split), target_filename[7:]
+        )
 
         source = Image.open(source_path).convert("RGB")
         target = Image.open(target_path).convert("RGB")
@@ -202,7 +208,7 @@ class CocoCannyDataset(Dataset):
     def __init__(self, split='train2017'):
         self.data = []
         self.split = split
-        with open('./training/COCO/{}/prompt.json'.format(split), 'rt') as f: # fill50k, COCO
+        with open('./training/COCO/{}/prompt.json'.format(split), 'rt') as f:    # fill50k, COCO
             for line in f:
                 self.data.append(json.loads(line))
 
@@ -226,8 +232,12 @@ class CocoCannyDataset(Dataset):
         target_filename = item['target']
         prompt = item['prompt']
 
-        source_path = os.path.join('./training/COCO/{}/canny/'.format(self.split), source_filename[7:])
-        target_path = os.path.join('./training/COCO/{}/color/'.format(self.split), target_filename[7:])
+        source_path = os.path.join(
+            './training/COCO/{}/canny/'.format(self.split), source_filename[7:]
+        )
+        target_path = os.path.join(
+            './training/COCO/{}/color/'.format(self.split), target_filename[7:]
+        )
 
         source = Image.open(source_path).convert("RGB")
         target = Image.open(target_path).convert("RGB")
@@ -245,7 +255,7 @@ class CocoDepthDataset(Dataset):
     def __init__(self, split='train2017'):
         self.data = []
         self.split = split
-        with open('./training/COCO/{}/prompt.json'.format(split), 'rt') as f: # fill50k, COCO
+        with open('./training/COCO/{}/prompt.json'.format(split), 'rt') as f:    # fill50k, COCO
             for line in f:
                 self.data.append(json.loads(line))
 
@@ -263,8 +273,12 @@ class CocoDepthDataset(Dataset):
         target_filename = item['target']
         prompt = item['prompt']
 
-        source_path = os.path.join('./training/COCO/{}/depth/'.format(self.split), source_filename[7:])
-        target_path = os.path.join('./training/COCO/{}/color/'.format(self.split), target_filename[7:])
+        source_path = os.path.join(
+            './training/COCO/{}/depth/'.format(self.split), source_filename[7:]
+        )
+        target_path = os.path.join(
+            './training/COCO/{}/color/'.format(self.split), target_filename[7:]
+        )
 
         source = Image.open(source_path).convert("RGB")
         target = Image.open(target_path).convert("RGB")
@@ -280,7 +294,7 @@ class CocoSegmDataset(Dataset):
     def __init__(self, split='train2017'):
         self.data = []
         self.split = split
-        with open('./training/COCO/{}/prompt.json'.format(split), 'rt') as f: # fill50k, COCO
+        with open('./training/COCO/{}/prompt.json'.format(split), 'rt') as f:    # fill50k, COCO
             for line in f:
                 self.data.append(json.loads(line))
 
@@ -298,8 +312,12 @@ class CocoSegmDataset(Dataset):
         target_filename = item['target']
         prompt = item['prompt']
 
-        source_path = os.path.join('./training/COCO/{}/segm/'.format(self.split), source_filename[7:])
-        target_path = os.path.join('./training/COCO/{}/color/'.format(self.split), target_filename[7:])
+        source_path = os.path.join(
+            './training/COCO/{}/segm/'.format(self.split), source_filename[7:]
+        )
+        target_path = os.path.join(
+            './training/COCO/{}/color/'.format(self.split), target_filename[7:]
+        )
 
         source = Image.open(source_path).convert("RGB")
         target = Image.open(target_path).convert("RGB")
@@ -310,11 +328,12 @@ class CocoSegmDataset(Dataset):
 
         return dict(jpg=target, txt=prompt, hint=source)
 
+
 class CocoPoseDataset(Dataset):
     def __init__(self, split='train2017'):
         self.data = []
         self.split = split
-        with open('./training/COCO/{}/prompt.json'.format(split), 'rt') as f: # fill50k, COCO
+        with open('./training/COCO/{}/prompt.json'.format(split), 'rt') as f:    # fill50k, COCO
             for line in f:
                 self.data.append(json.loads(line))
 
@@ -328,9 +347,12 @@ class CocoPoseDataset(Dataset):
         target_filename = item['target']
         prompt = item['prompt']
 
-        source = cv2.imread('./training/COCO/{}/pose/'.format(self.split) + source_filename[7:]) # fill50k, COCO
-        target = cv2.imread('./training/COCO/{}/color/'.format(self.split) + source_filename[7:]) # fill50k, COCO
-
+        source = cv2.imread(
+            './training/COCO/{}/pose/'.format(self.split) + source_filename[7:]
+        )    # fill50k, COCO
+        target = cv2.imread(
+            './training/COCO/{}/color/'.format(self.split) + source_filename[7:]
+        )    # fill50k, COCO
 
         # Do not forget that OpenCV read images in BGR order.
         source = cv2.cvtColor(source, cv2.COLOR_BGR2RGB)

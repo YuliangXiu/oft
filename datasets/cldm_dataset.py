@@ -1,14 +1,14 @@
 import json
+
 import cv2
 import numpy as np
-
 from torch.utils.data import Dataset
 
 
 class Fill50kDataset(Dataset):
     def __init__(self):
         self.data = []
-        with open('./data/fill50k/prompt.json', 'rt') as f: # fill50k, COCO
+        with open('./data/fill50k/prompt.json', 'rt') as f:    # fill50k, COCO
             for line in f:
                 self.data.append(json.loads(line))
 
@@ -22,8 +22,8 @@ class Fill50kDataset(Dataset):
         target_filename = item['target']
         prompt = item['prompt']
 
-        source = cv2.imread('./training/fill50k/' + source_filename) # fill50k, COCO
-        target = cv2.imread('./training/fill50k/' + target_filename) # fill50k, COCO
+        source = cv2.imread('./training/fill50k/' + source_filename)    # fill50k, COCO
+        target = cv2.imread('./training/fill50k/' + target_filename)    # fill50k, COCO
 
         # Do not forget that OpenCV read images in BGR order.
         source = cv2.cvtColor(source, cv2.COLOR_BGR2RGB)
@@ -36,4 +36,3 @@ class Fill50kDataset(Dataset):
         target = (target.astype(np.float32) / 127.5) - 1.0
 
         return dict(jpg=target, txt=prompt, hint=source)
-

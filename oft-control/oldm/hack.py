@@ -1,11 +1,9 @@
-import torch
 import einops
-
-import ldm.modules.encoders.modules
 import ldm.modules.attention
-
-from transformers import logging
+import ldm.modules.encoders.modules
+import torch
 from ldm.modules.attention import default
+from transformers import logging
 
 
 def disable_verbosity():
@@ -45,7 +43,7 @@ def _hacked_clip_forward(self, text):
             return self.transformer(input_ids=t, output_hidden_states=False).last_hidden_state
 
     def split(x):
-        return x[75 * 0: 75 * 1], x[75 * 1: 75 * 2], x[75 * 2: 75 * 3]
+        return x[75 * 0:75 * 1], x[75 * 1:75 * 2], x[75 * 2:75 * 3]
 
     def pad(x, p, i):
         return x[:i] if len(x) >= i else x + [p] * (i - len(x))

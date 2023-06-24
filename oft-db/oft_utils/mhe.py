@@ -1,12 +1,11 @@
+import copy
+import math
+
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-import math
-
-
-import copy
-import numpy as np
 
 class MHE_LoRA(nn.Module):
     def __init__(self, model):
@@ -40,10 +39,11 @@ class MHE_LoRA(nn.Module):
                     else:
                         pass
                     with torch.no_grad():
-                        self.extracted_params[name] += self.extracted_params[lora_up].cuda() @ self.extracted_params[lora_down].cuda()
+                        self.extracted_params[name] += self.extracted_params[lora_up].cuda(
+                        ) @ self.extracted_params[lora_down].cuda()
                     keys_to_delete.append(lora_up)
                     keys_to_delete.append(lora_down)
-                
+
         for key in keys_to_delete:
             del self.extracted_params[key]
 
@@ -73,7 +73,7 @@ class MHE_LoRA(nn.Module):
             final -= torch.tril(final)
             cnt = n_filt * (n_filt - 1) / 2.0
             MHE_loss = 1 * torch.sum(final) / cnt
-        
+
         else:
             n_filt, _, _, _ = filt.shape
             filt = filt.reshape(n_filt, -1)
@@ -117,10 +117,12 @@ def project(R, eps):
     else:
         return I + eps * (diff / norm_diff)
 
+
 def project_batch(R, eps=1e-5):
     # scaling factor for each of the smaller block matrix
     eps = eps * 1 / torch.sqrt(torch.tensor(R.shape[0]))
-    I = torch.zeros((R.size(1), R.size(1)), device=R.device, dtype=R.dtype).unsqueeze(0).expand_as(R)
+    I = torch.zeros((R.size(1), R.size(1)), device=R.device,
+                    dtype=R.dtype).unsqueeze(0).expand_as(R)
     diff = R - I
     norm_diff = torch.norm(R - I, dim=(1, 2), keepdim=True)
     mask = (norm_diff <= eps).bool()
@@ -157,7 +159,7 @@ class MHE_OFT(nn.Module):
                         oft_R = name.replace('to_out.0.weight', 'processor.to_out_oft.R')
                     else:
                         pass
-                    
+
                     R = self.extracted_params[oft_R].cuda()
 
                     with torch.no_grad():
@@ -170,12 +172,13 @@ class MHE_OFT(nn.Module):
                             R.copy_(project_batch(R, eps=self.eps))
                             orth_rotate = self.cayley_batch(R)
 
-                        self.extracted_params[name] = self.extracted_params[name] @ self.block_diagonal(orth_rotate)
+                        self.extracted_params[
+                            name] = self.extracted_params[name] @ self.block_diagonal(orth_rotate)
                     keys_to_delete.append(oft_R)
-                
+
         for key in keys_to_delete:
             del self.extracted_params[key]
-    
+
     def is_orthogonal(self, R, eps=1e-5):
         with torch.no_grad():
             RtR = torch.matmul(R.t(), R)
@@ -201,7 +204,7 @@ class MHE_OFT(nn.Module):
             param.requires_grad = False
             param.detach_()
         return copied_model
-    
+
     def cayley(self, data):
         r, c = list(data.shape)
         # Ensure the input matrix is skew-symmetric
@@ -210,7 +213,7 @@ class MHE_OFT(nn.Module):
         # Perform the Cayley parametrization
         Q = torch.mm(I + skew, torch.inverse(I - skew))
         return Q
-    
+
     def cayley_batch(self, data):
         b, r, c = data.shape
         # Ensure the input matrix is skew-symmetric
@@ -242,7 +245,7 @@ class MHE_OFT(nn.Module):
             final -= torch.tril(final)
             cnt = n_filt * (n_filt - 1) / 2.0
             MHE_loss = 1 * torch.sum(final) / cnt
-        
+
         else:
             n_filt, _, _, _ = filt.shape
             filt = filt.reshape(n_filt, -1)
@@ -275,7 +278,7 @@ class MHE_OFT(nn.Module):
                     mhe_loss.append(loss.cpu().detach().item())
             mhe_loss = np.array(mhe_loss)
         return mhe_loss.sum()
-    
+
     def is_orthogonal(self, R, eps=1e-5):
         with torch.no_grad():
             RtR = torch.matmul(R.t(), R)
@@ -289,7 +292,6 @@ class MHE_OFT(nn.Module):
             return False
         identity = torch.eye(tensor.shape[0], device=tensor.device)
         return torch.all(torch.eq(tensor, identity))
-
 
 
 class MHE_db:
@@ -325,7 +327,7 @@ class MHE_db:
             final -= torch.tril(final)
             cnt = n_filt * (n_filt - 1) / 2.0
             MHE_loss = 1 * torch.sum(final) / cnt
-        
+
         else:
             n_filt, _, _, _ = filt.shape
             filt = filt.reshape(n_filt, -1)

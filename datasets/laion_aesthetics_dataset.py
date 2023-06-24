@@ -1,11 +1,12 @@
-import os
 import json
+import os
+
 from PIL import Image
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 from torchvision.utils import save_image
-
 from tqdm import tqdm
+
 
 class LaionAestheticsRawDataset(Dataset):
     def __init__(self, root_dir, chunks=None, transform=None):
@@ -17,9 +18,16 @@ class LaionAestheticsRawDataset(Dataset):
         for subdir in chunks:
             subdir_path = os.path.join(self.root_dir, subdir)
             if os.path.isdir(subdir_path):
-                caption_files = sorted([os.path.join(subdir_path, f) for f in os.listdir(subdir_path) if f.endswith('.txt')])
-                image_files = sorted([os.path.join(subdir_path, f) for f in os.listdir(subdir_path) if f.endswith('.jpg')])
-                assert len(caption_files) == len(image_files), 'Number of captions and images does not match'
+                caption_files = sorted([
+                    os.path.join(subdir_path, f)
+                    for f in os.listdir(subdir_path) if f.endswith('.txt')
+                ])
+                image_files = sorted([
+                    os.path.join(subdir_path, f)
+                    for f in os.listdir(subdir_path) if f.endswith('.jpg')
+                ])
+                assert len(caption_files
+                          ) == len(image_files), 'Number of captions and images does not match'
                 self.image_files.extend(image_files)
                 self.captions.extend(caption_files)
 
@@ -48,9 +56,16 @@ class LaionAestheticsRawHumanDataset(Dataset):
         for subdir in chunks:
             subdir_path = os.path.join(self.root_dir, subdir)
             if os.path.isdir(subdir_path):
-                caption_files = sorted([os.path.join(subdir_path, f) for f in os.listdir(subdir_path) if f.endswith('.txt')])
-                image_files = sorted([os.path.join(subdir_path, f) for f in os.listdir(subdir_path) if f.endswith('.jpg')])
-                assert len(caption_files) == len(image_files), 'Number of captions and images does not match'
+                caption_files = sorted([
+                    os.path.join(subdir_path, f)
+                    for f in os.listdir(subdir_path) if f.endswith('.txt')
+                ])
+                image_files = sorted([
+                    os.path.join(subdir_path, f)
+                    for f in os.listdir(subdir_path) if f.endswith('.jpg')
+                ])
+                assert len(caption_files
+                          ) == len(image_files), 'Number of captions and images does not match'
                 self.image_files.extend(image_files)
                 self.captions.extend(caption_files)
 
@@ -73,7 +88,7 @@ class LaionAestheticsDataset(Dataset):
     def __init__(self, split='train', transform=None):
         self.data = []
         self.split = split
-        with open('../data/LAION/prompt_{}.json'.format(split), 'rt') as f: # fill50k, COCO
+        with open('../data/LAION/prompt_{}.json'.format(split), 'rt') as f:    # fill50k, COCO
             for line in f:
                 self.data.append(json.loads(line))
         self.transform = transform
@@ -89,7 +104,9 @@ class LaionAestheticsDataset(Dataset):
         prompt = item['prompt']
 
         # source = cv2.imread('../data/LAION/{}/'.format(self.split) + source_filename[7:]) # fill50k, COCO
-        image_path = os.path.join('../data/LAION/{}/'.format(self.split), target_filename[7:]) # fill50k, COCO
+        image_path = os.path.join(
+            '../data/LAION/{}/'.format(self.split), target_filename[7:]
+        )    # fill50k, COCO
 
         # Do not forget that OpenCV read images in BGR order.
         # source = cv2.cvtColor(source, cv2.COLOR_BGR2RGB)
@@ -110,8 +127,8 @@ class LaionAestheticsDataset(Dataset):
 
 if __name__ == '__main__':
     transform = transforms.Compose([
-        transforms.Resize((512, 512)),  # resize the image to (512, 512)
-        transforms.ToTensor()  # convert the image to a tensor
+        transforms.Resize((512, 512)),    # resize the image to (512, 512)
+        transforms.ToTensor()    # convert the image to a tensor
     ])
 
     # val dataset [00041, ..., 00043]
@@ -119,7 +136,9 @@ if __name__ == '__main__':
     prompt_path = './data/LAION/prompt_val.json'
     captions = []
     chunks = [f"{i:05d}" for i in range(41, 44)]
-    dataset = LaionAestheticsRawDataset(root_dir='./data/laion-aesthetic/laion-aesthetic-data/', chunks=chunks, transform=transform)
+    dataset = LaionAestheticsRawDataset(
+        root_dir='./data/laion-aesthetic/laion-aesthetic-data/', chunks=chunks, transform=transform
+    )
     for i in tqdm(range(len(dataset))):
         data = dataset[i]
         image, caption = data
@@ -130,8 +149,7 @@ if __name__ == '__main__':
     with open(prompt_path, 'w') as f:
         for idx, caption in enumerate(captions):
             line_data = {
-                'source': 'source/{}.png'.format(idx), 
-                'target': 'target/{}.png'.format(idx), 
+                'source': 'source/{}.png'.format(idx), 'target': 'target/{}.png'.format(idx),
                 'prompt': caption
             }
             json.dump(line_data, f)
@@ -142,7 +160,9 @@ if __name__ == '__main__':
     prompt_path = './data/LAION/prompt_train.json'
     captions = []
     chunks = [f"{i:05d}" for i in range(0, 41)]
-    dataset = LaionAestheticsDataset(root_dir='./data/laion-aesthetic/laion-aesthetic-data/', chunks=chunks, transform=transform)
+    dataset = LaionAestheticsDataset(
+        root_dir='./data/laion-aesthetic/laion-aesthetic-data/', chunks=chunks, transform=transform
+    )
     for i in tqdm(range(len(dataset))):
         data = dataset[i]
         image, caption = data
@@ -153,8 +173,7 @@ if __name__ == '__main__':
     with open(prompt_path, 'w') as f:
         for idx, caption in enumerate(captions):
             line_data = {
-                'source': 'source/{}.png'.format(idx), 
-                'target': 'target/{}.png'.format(idx), 
+                'source': 'source/{}.png'.format(idx), 'target': 'target/{}.png'.format(idx),
                 'prompt': caption
             }
             json.dump(line_data, f)

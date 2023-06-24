@@ -1,8 +1,16 @@
-from datasets.coco_dataset import CocoCannyDataset, CocoDepthDataset, CocoCanny1KDataset, CocoCanny5KDataset, CocoCanny20KDataset, CocoCanny50KDataset
-from datasets.ade20k_dataset import ADE20kSegmDataset, AblationADE20kSegmDataset
+from datasets.ade20k_dataset import AblationADE20kSegmDataset, ADE20kSegmDataset
+from datasets.celebhq_dataset import CelebHQDataset
+from datasets.coco_dataset import (
+    CocoCanny1KDataset,
+    CocoCanny5KDataset,
+    CocoCanny20KDataset,
+    CocoCanny50KDataset,
+    CocoCannyDataset,
+    CocoDepthDataset,
+)
 from datasets.deepfashion_dataset import DeepFashionDenseposeDataset
 from datasets.laion_dataset import LaionSketchDataset
-from datasets.celebhq_dataset import CelebHQDataset
+
 
 def return_dataset(control, is_t2i=False, full=False, n_samples=0):
     if control == 'segm':
@@ -36,7 +44,7 @@ def return_dataset(control, is_t2i=False, full=False, n_samples=0):
         train_dataset = CocoCanny50KDataset(split='train', is_t2i=is_t2i, full=full)
         val_dataset = CocoCanny50KDataset(split='val', is_t2i=is_t2i, full=full)
         max_epochs = 10
-    
+
     elif control == 'canny20k':
         data_name = 'COCO'
         logger_freq = 300
@@ -44,7 +52,7 @@ def return_dataset(control, is_t2i=False, full=False, n_samples=0):
         train_dataset = CocoCanny20KDataset(split='train', is_t2i=is_t2i, full=full)
         val_dataset = CocoCanny20KDataset(split='val', is_t2i=is_t2i, full=full)
         max_epochs = 10
-    
+
     elif control == 'canny5k':
         data_name = 'COCO'
         logger_freq = 300
@@ -84,15 +92,20 @@ def return_dataset(control, is_t2i=False, full=False, n_samples=0):
         train_dataset = CelebHQDataset(split='train', is_t2i=is_t2i, full=full)
         val_dataset = CelebHQDataset(split='val', is_t2i=is_t2i, full=full)
         max_epochs = 20
-    
+
     elif control == 'ablation_segm':
         logger_freq = 100000000000
         data_name = 'ADE20K'
-        print('[Num of Samples]: {}'.format(n_samples), '[Control]: {}'.format(control), '[Control]: {}'.format(control), '[Dataset]: {}'.format(data_name))
-        train_dataset = AblationADE20kSegmDataset(split='train', is_t2i=is_t2i, full=full, n_samples=n_samples)
+        print(
+            '[Num of Samples]: {}'.format(n_samples), '[Control]: {}'.format(control),
+            '[Control]: {}'.format(control), '[Dataset]: {}'.format(data_name)
+        )
+        train_dataset = AblationADE20kSegmDataset(
+            split='train', is_t2i=is_t2i, full=full, n_samples=n_samples
+        )
         val_dataset = AblationADE20kSegmDataset(split='val', is_t2i=is_t2i, full=full)
         max_epochs = 1
-        
+
     else:
         # default code
         print('unknown control!')

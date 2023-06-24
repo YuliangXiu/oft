@@ -1,0 +1,15 @@
+executable = ./oft-control/test_controlnet_oft.sh
+arguments = $(idx)
+exp_name = test_cn_oft
+error = ./oft-control/log/$(exp_name).$(Process).err
+output = ./oft-control/log/$(exp_name).$(Process).out
+log = ./oft-control/log/$(exp_name).$(Process).log
+
+request_memory = 60000
+request_disk = 10G
+request_cpus = 20
+request_gpus = 1
+requirements = TARGET.CUDACapability > 7.5 
+requirements = TARGET.CUDAGlobalMemoryMb  > 50000
+
+queue 1 idx from seq 0 0 |

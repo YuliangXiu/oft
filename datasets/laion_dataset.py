@@ -1,15 +1,14 @@
+import json
+import os
+import random
+import sys
+
 import cv2
 import einops
 import gradio as gr
 import numpy as np
 import torch
-import random
 from PIL import Image
-import json
-
-import os
-import sys
-import torch
 from torch.utils.data import DataLoader, Dataset
 
 
@@ -18,16 +17,22 @@ class LaionSketchDataset(Dataset):
         self.data = []
         self.split = split
         if split == 'train':
-            with open('./data/LAION/{}/prompt_{}_blip.json'.format(split, split), 'rt') as f: # fill50k, COCO
+            with open(
+                './data/LAION/{}/prompt_{}_blip.json'.format(split, split), 'rt'
+            ) as f:    # fill50k, COCO
                 for line in f:
                     self.data.append(json.loads(line))
         else:
             if full:
-                with open('./data/LAION/{}/prompt_{}_blip_full.json'.format(split, split), 'rt') as f: # fill50k, COCO
+                with open(
+                    './data/LAION/{}/prompt_{}_blip_full.json'.format(split, split), 'rt'
+                ) as f:    # fill50k, COCO
                     for line in f:
                         self.data.append(json.loads(line))
             else:
-                with open('./data/LAION/{}/prompt_{}_blip.json'.format(split, split), 'rt') as f: # fill50k, COCO
+                with open(
+                    './data/LAION/{}/prompt_{}_blip.json'.format(split, split), 'rt'
+                ) as f:    # fill50k, COCO
                     for line in f:
                         self.data.append(json.loads(line))
 
@@ -43,8 +48,12 @@ class LaionSketchDataset(Dataset):
         target_filename = item['target']
         prompt = item['prompt']
 
-        source = cv2.imread('./data/LAION/{}/sketch/'.format(self.split) + source_filename[7:]) # fill50k, COCO
-        target = cv2.imread('./data/LAION/{}/color/'.format(self.split) + source_filename[7:]) # fill50k, COCO
+        source = cv2.imread(
+            './data/LAION/{}/sketch/'.format(self.split) + source_filename[7:]
+        )    # fill50k, COCO
+        target = cv2.imread(
+            './data/LAION/{}/color/'.format(self.split) + source_filename[7:]
+        )    # fill50k, COCO
 
         # Do not forget that OpenCV read images in BGR order.
         source = cv2.cvtColor(source, cv2.COLOR_BGR2RGB)

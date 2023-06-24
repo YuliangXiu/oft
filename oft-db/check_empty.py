@@ -1,35 +1,31 @@
-import os
 import fnmatch
-
+import os
 
 subject_names = [
-    "backpack", "backpack_dog", "bear_plushie", "berry_bowl", "can", 
-    "candle", "cat", "cat2", "clock", "colorful_sneaker",    
-    "dog", "dog2", "dog3", "dog5", "dog6",    
-    "dog7", "dog8", "duck_toy", "fancy_boot", "grey_sloth_plushie",    
-    "monster_toy", "pink_sunglasses", "poop_emoji", "rc_car", "red_cartoon",    
-    "robot_toy", "shiny_sneaker", "teapot", "vase", "wolf_plushie"
+    "backpack", "backpack_dog", "bear_plushie", "berry_bowl", "can", "candle", "cat", "cat2",
+    "clock", "colorful_sneaker", "dog", "dog2", "dog3", "dog5", "dog6", "dog7", "dog8", "duck_toy",
+    "fancy_boot", "grey_sloth_plushie", "monster_toy", "pink_sunglasses", "poop_emoji", "rc_car",
+    "red_cartoon", "robot_toy", "shiny_sneaker", "teapot", "vase", "wolf_plushie"
 ]
-
 
 
 def find_subdirectory_names_without_png(directory):
     subdirectory_names_without_png = []
-    
+
     for root, dirs, files in os.walk(directory):
         png_files = [f for f in files if fnmatch.fnmatch(f, '*.png')]
-        
+
         if not png_files:
             subdirectory_name = os.path.basename(root)
             subdirectory_names_without_png.append(subdirectory_name)
-    
+
     all_contents = os.listdir(directory)
-    subdirectories = [item for item in all_contents]     
-    for subject in subject_names: 
-        for i in range(25): 
-            name = subject + '-' + str(i) 
-            if name not in subdirectories: 
-                subdirectory_names_without_png.append(name) 
+    subdirectories = [item for item in all_contents]
+    for subject in subject_names:
+        for i in range(25):
+            name = subject + '-' + str(i)
+            if name not in subdirectories:
+                subdirectory_names_without_png.append(name)
 
     print(subdirectory_names_without_png)
     return subdirectory_names_without_png
@@ -57,7 +53,7 @@ def find_directories_missing_folders(directory, folder_names):
 if __name__ == "__main__":
     # directory = "./log_db"
     # subdirectory_names_without_png = find_subdirectory_names_without_png(directory)
-    
+
     directory = './log_lora'
     folder_names = ['5', '6', '7', '8', '9']
     subdirectory_names_without_png = find_directories_missing_folders(directory, folder_names)
@@ -80,4 +76,3 @@ if __name__ == "__main__":
     print(len(indices))
     print()
     print(list_str)
-

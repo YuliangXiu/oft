@@ -8,10 +8,9 @@ License: Apache License 2.0
 
 import json
 import math
+import pickle
 from itertools import groupby
 from typing import Callable, Dict, List, Optional, Set, Tuple, Type, Union
-
-import pickle
 
 import numpy as np
 import PIL
@@ -40,9 +39,7 @@ except ImportError:
 
 
 class LoraInjectedLinear(nn.Module):
-    def __init__(
-        self, in_features, out_features, bias=False, r=4, dropout_p=0.1, scale=1.0
-    ):
+    def __init__(self, in_features, out_features, bias=False, r=4, dropout_p=0.1, scale=1.0):
         super().__init__()
 
         if r > min(in_features, out_features):
@@ -63,8 +60,8 @@ class LoraInjectedLinear(nn.Module):
     def forward(self, input):
         return (
             self.linear(input) + self.lora_up(self.selector(self.lora_down(input))) * self.scale
-            # + self.dropout(self.lora_up(self.selector(self.lora_down(input))))
-            # * self.scale
+        # + self.dropout(self.lora_up(self.selector(self.lora_down(input))))
+        # * self.scale
         )
 
     def realize_as_lora(self):
@@ -72,12 +69,12 @@ class LoraInjectedLinear(nn.Module):
 
     def set_selector_from_diag(self, diag: torch.Tensor):
         # diag is a 1D tensor of size (r,)
-        assert diag.shape == (self.r,)
+        assert diag.shape == (self.r, )
         self.selector = nn.Linear(self.r, self.r, bias=False)
         self.selector.weight.data = torch.diag(diag)
-        self.selector.weight.data = self.selector.weight.data.to(
-            self.lora_up.weight.device
-        ).to(self.lora_up.weight.dtype)
+        self.selector.weight.data = self.selector.weight.data.to(self.lora_up.weight.device).to(
+            self.lora_up.weight.dtype
+        )
 
 
 class LoraInjectedConv2d(nn.Module):
@@ -140,8 +137,8 @@ class LoraInjectedConv2d(nn.Module):
     def forward(self, input):
         return (
             self.linear(input) + self.lora_up(self.selector(self.lora_down(input))) * self.scale
-            # + self.dropout(self.lora_up(self.selector(self.lora_down(input))))
-            # * self.scale
+        # + self.dropout(self.lora_up(self.selector(self.lora_down(input))))
+        # * self.scale
         )
 
     def realize_as_lora(self):
@@ -149,7 +146,7 @@ class LoraInjectedConv2d(nn.Module):
 
     def set_selector_from_diag(self, diag: torch.Tensor):
         # diag is a 1D tensor of size (r,)
-        assert diag.shape == (self.r,)
+        assert diag.shape == (self.r, )
         self.selector = nn.Conv2d(
             in_channels=self.r,
             out_channels=self.r,
@@ -161,9 +158,9 @@ class LoraInjectedConv2d(nn.Module):
         self.selector.weight.data = torch.diag(diag)
 
         # same device + dtype as lora_up
-        self.selector.weight.data = self.selector.weight.data.to(
-            self.lora_up.weight.device
-        ).to(self.lora_up.weight.dtype)
+        self.selector.weight.data = self.selector.weight.data.to(self.lora_up.weight.device).to(
+            self.lora_up.weight.dtype
+        )
 
 
 UNET_DEFAULT_TARGET_REPLACE = {"CrossAttention", "Attention", "GEGLU"}
@@ -192,9 +189,9 @@ def _find_children(
     for parent in model.modules():
         for name, module in parent.named_children():
             if any([isinstance(module, _class) for _class in search_class]):
-                result.append((parent, name, module))  # Append the result to the list
+                result.append((parent, name, module))    # Append the result to the list
 
-    return result  # Return the list instead of using 'yield'
+    return result    # Return the list instead of using 'yield'
 
 
 def _find_modules_v2(
@@ -216,9 +213,7 @@ def _find_modules_v2(
     # Get the targets we should replace all linears under
     if ancestor_class is not None:
         ancestors = (
-            module
-            for module in model.modules()
-            if module.__class__.__name__ in ancestor_class
+            module for module in model.modules() if module.__class__.__name__ in ancestor_class
         )
     else:
         # this, incase you want to naively iterate over all modules.
@@ -235,13 +230,14 @@ def _find_modules_v2(
                 while path:
                     parent = parent.get_submodule(path.pop(0))
                 # Skip this linear if it's a child of a LoraInjectedLinear
-                if exclude_children_of and any(
-                    [isinstance(parent, _class) for _class in exclude_children_of]
-                ):
+                if exclude_children_of and any([
+                    isinstance(parent, _class) for _class in exclude_children_of
+                ]):
                     continue
-                results.append((parent, name, module))  # Append the result to the list
+                results.append((parent, name, module))    # Append the result to the list
 
-    return results  # Return the list instead of using 'yield'
+    return results    # Return the list instead of using 'yield'
+
 
 def _find_modules_old(
     model,
@@ -263,11 +259,12 @@ def _find_modules_old(
 _find_modules = _find_modules_v2
 # _find_modules = _find_modules_old
 
+
 def inject_trainable_lora(
     model: nn.Module,
     target_replace_module: Set[str] = DEFAULT_TARGET_REPLACE,
     r: int = 4,
-    loras=None,  # path to lora .pt
+    loras=None,    # path to lora .pt
     verbose: bool = False,
     dropout_p: float = 0.0,
     scale: float = 1.0,
@@ -325,7 +322,7 @@ def inject_trainable_lora_extended(
     model: nn.Module,
     target_replace_module: Set[str] = UNET_EXTENDED_TARGET_REPLACE,
     r: int = 4,
-    loras=None,  # path to lora .pt
+    loras=None,    # path to lora .pt
 ):
     """
     inject lora into model, and returns lora parameter groups.
@@ -409,9 +406,7 @@ def extract_lora_ups_down(model, target_replace_module=DEFAULT_TARGET_REPLACE):
     return loras
 
 
-def extract_lora_as_tensor(
-    model, target_replace_module=DEFAULT_TARGET_REPLACE, as_fp16=True
-):
+def extract_lora_as_tensor(model, target_replace_module=DEFAULT_TARGET_REPLACE, as_fp16=True):
 
     loras = []
 
@@ -439,9 +434,7 @@ def save_lora_weight(
     target_replace_module=DEFAULT_TARGET_REPLACE,
 ):
     weights = []
-    for _up, _down in extract_lora_ups_down(
-        model, target_replace_module=target_replace_module
-    ):
+    for _up, _down in extract_lora_ups_down(model, target_replace_module=target_replace_module):
         weights.append(_up.weight.to("cpu").to(torch.float16))
         weights.append(_down.weight.to("cpu").to(torch.float16))
 
@@ -477,9 +470,7 @@ def save_safeloras_with_embeds(
     for name, (model, target_replace_module) in modelmap.items():
         metadata[name] = json.dumps(list(target_replace_module))
 
-        for i, (_up, _down) in enumerate(
-            extract_lora_as_tensor(model, target_replace_module)
-        ):
+        for i, (_up, _down) in enumerate(extract_lora_as_tensor(model, target_replace_module)):
             rank = _down.shape[0]
 
             metadata[f"{name}:{i}:rank"] = str(rank)
@@ -571,9 +562,7 @@ def parse_safeloras(
         info = metadata.get(name)
 
         if not info:
-            raise ValueError(
-                f"Tensor {name} has no metadata - is this a Lora safetensor?"
-            )
+            raise ValueError(f"Tensor {name} has no metadata - is this a Lora safetensor?")
 
         # Skip Textual Inversion embeds
         if info == EMBED_FLAG:
@@ -605,9 +594,7 @@ def parse_safeloras(
     return loras
 
 
-def parse_safeloras_embeds(
-    safeloras,
-) -> Dict[str, torch.Tensor]:
+def parse_safeloras_embeds(safeloras, ) -> Dict[str, torch.Tensor]:
     """
     Converts a loaded safetensor file that contains Textual Inversion embeds into
     a dictionary of embed_token: Tensor
@@ -653,28 +640,19 @@ def collapse_lora(model, alpha=1.0):
             print("Collapsing Lin Lora in", name)
 
             _child_module.linear.weight = nn.Parameter(
-                _child_module.linear.weight.data
-                + alpha
-                * (
-                    _child_module.lora_up.weight.data
-                    @ _child_module.lora_down.weight.data
-                )
-                .type(_child_module.linear.weight.dtype)
-                .to(_child_module.linear.weight.device)
+                _child_module.linear.weight.data + alpha *
+                (_child_module.lora_up.weight.data @ _child_module.lora_down.weight.data
+                ).type(_child_module.linear.weight.dtype).to(_child_module.linear.weight.device)
             )
 
         else:
             print("Collapsing Conv Lora in", name)
             _child_module.conv.weight = nn.Parameter(
-                _child_module.conv.weight.data
-                + alpha
-                * (
+                _child_module.conv.weight.data + alpha * (
                     _child_module.lora_up.weight.data.flatten(start_dim=1)
                     @ _child_module.lora_down.weight.data.flatten(start_dim=1)
-                )
-                .reshape(_child_module.conv.weight.data.shape)
-                .type(_child_module.conv.weight.dtype)
-                .to(_child_module.conv.weight.device)
+                ).reshape(_child_module.conv.weight.data.shape).
+                type(_child_module.conv.weight.dtype).to(_child_module.conv.weight.device)
             )
 
 
@@ -688,9 +666,7 @@ def monkeypatch_or_replace_lora(
         model, target_replace_module, search_class=[nn.Linear, LoraInjectedLinear]
     ):
         _source = (
-            _child_module.linear
-            if isinstance(_child_module, LoraInjectedLinear)
-            else _child_module
+            _child_module.linear if isinstance(_child_module, LoraInjectedLinear) else _child_module
         )
 
         weight = _source.weight
@@ -712,12 +688,8 @@ def monkeypatch_or_replace_lora(
         up_weight = loras.pop(0)
         down_weight = loras.pop(0)
 
-        _module._modules[name].lora_up.weight = nn.Parameter(
-            up_weight.type(weight.dtype)
-        )
-        _module._modules[name].lora_down.weight = nn.Parameter(
-            down_weight.type(weight.dtype)
-        )
+        _module._modules[name].lora_up.weight = nn.Parameter(up_weight.type(weight.dtype))
+        _module._modules[name].lora_down.weight = nn.Parameter(down_weight.type(weight.dtype))
 
         _module._modules[name].to(weight.device)
 
@@ -734,16 +706,14 @@ def monkeypatch_or_replace_lora_extended(
         search_class=[nn.Linear, LoraInjectedLinear, nn.Conv2d, LoraInjectedConv2d],
     ):
 
-        if (_child_module.__class__ == nn.Linear) or (
-            _child_module.__class__ == LoraInjectedLinear
-        ):
+        if (_child_module.__class__
+            == nn.Linear) or (_child_module.__class__ == LoraInjectedLinear):
             if len(loras[0].shape) != 2:
                 continue
 
             _source = (
                 _child_module.linear
-                if isinstance(_child_module, LoraInjectedLinear)
-                else _child_module
+                if isinstance(_child_module, LoraInjectedLinear) else _child_module
             )
 
             weight = _source.weight
@@ -759,15 +729,13 @@ def monkeypatch_or_replace_lora_extended(
             if bias is not None:
                 _tmp.linear.bias = bias
 
-        elif (_child_module.__class__ == nn.Conv2d) or (
-            _child_module.__class__ == LoraInjectedConv2d
-        ):
+        elif (_child_module.__class__
+              == nn.Conv2d) or (_child_module.__class__ == LoraInjectedConv2d):
             if len(loras[0].shape) != 4:
                 continue
             _source = (
                 _child_module.conv
-                if isinstance(_child_module, LoraInjectedConv2d)
-                else _child_module
+                if isinstance(_child_module, LoraInjectedConv2d) else _child_module
             )
 
             weight = _source.weight
@@ -795,12 +763,8 @@ def monkeypatch_or_replace_lora_extended(
         up_weight = loras.pop(0)
         down_weight = loras.pop(0)
 
-        _module._modules[name].lora_up.weight = nn.Parameter(
-            up_weight.type(weight.dtype)
-        )
-        _module._modules[name].lora_down.weight = nn.Parameter(
-            down_weight.type(weight.dtype)
-        )
+        _module._modules[name].lora_up.weight = nn.Parameter(up_weight.type(weight.dtype))
+        _module._modules[name].lora_down.weight = nn.Parameter(down_weight.type(weight.dtype))
 
         _module._modules[name].to(weight.device)
 
@@ -826,9 +790,7 @@ def monkeypatch_remove_lora(model):
             _source = _child_module.linear
             weight, bias = _source.weight, _source.bias
 
-            _tmp = nn.Linear(
-                _source.in_features, _source.out_features, bias is not None
-            )
+            _tmp = nn.Linear(_source.in_features, _source.out_features, bias is not None)
 
             _tmp.weight = weight
             if bias is not None:
@@ -872,12 +834,12 @@ def monkeypatch_add_lora(
         down_weight = loras.pop(0)
 
         _module._modules[name].lora_up.weight = nn.Parameter(
-            up_weight.type(weight.dtype).to(weight.device) * alpha
-            + _module._modules[name].lora_up.weight.to(weight.device) * beta
+            up_weight.type(weight.dtype).to(weight.device) * alpha +
+            _module._modules[name].lora_up.weight.to(weight.device) * beta
         )
         _module._modules[name].lora_down.weight = nn.Parameter(
-            down_weight.type(weight.dtype).to(weight.device) * alpha
-            + _module._modules[name].lora_down.weight.to(weight.device) * beta
+            down_weight.type(weight.dtype).to(weight.device) * alpha +
+            _module._modules[name].lora_down.weight.to(weight.device) * beta
         )
 
         _module._modules[name].to(weight.device)
@@ -915,9 +877,9 @@ def apply_learned_embed_in_clip(
     if isinstance(token, str):
         trained_tokens = [token]
     elif isinstance(token, list):
-        assert len(learned_embeds.keys()) == len(
-            token
-        ), "The number of tokens and the number of embeds should be the same"
+        assert len(
+            learned_embeds.keys()
+        ) == len(token), "The number of tokens and the number of embeds should be the same"
         trained_tokens = token
     else:
         trained_tokens = list(learned_embeds.keys())
@@ -959,9 +921,7 @@ def load_learned_embed_in_clip(
     idempotent=False,
 ):
     learned_embeds = torch.load(learned_embeds_path)
-    apply_learned_embed_in_clip(
-        learned_embeds, text_encoder, tokenizer, token, idempotent
-    )
+    apply_learned_embed_in_clip(learned_embeds, text_encoder, tokenizer, token, idempotent)
 
 
 def patch_pipe(
@@ -1082,9 +1042,7 @@ def save_all(
         # save text encoder
         if save_lora:
 
-            save_lora_weight(
-                unet, save_path, target_replace_module=target_replace_module_unet
-            )
+            save_lora_weight(unet, save_path, target_replace_module=target_replace_module_unet)
             print("Unet saved to ", save_path)
 
             save_lora_weight(

@@ -1,25 +1,31 @@
+import os
+import sys
+
 import einops
 import torch
 import torch as th
 import torch.nn as nn
-
-import os
-import sys
-
+from einops import rearrange, repeat
+from ldm.models.diffusion.ddim import DDIMSampler
+from ldm.models.diffusion.ddpm import LatentDiffusion
+from ldm.modules.attention import SpatialTransformer
+from ldm.modules.diffusionmodules.openaimodel import (
+    AttentionBlock,
+    Downsample,
+    ResBlock,
+    TimestepEmbedSequential,
+    UNetModel,
+    Upsample,
+    normalization,
+)
 from ldm.modules.diffusionmodules.util import (
     conv_nd,
     linear,
-    zero_module,
     timestep_embedding,
+    zero_module,
 )
-
-from einops import rearrange, repeat
+from ldm.util import exists, instantiate_from_config, log_txt_as_img
 from torchvision.utils import make_grid
-from ldm.modules.attention import SpatialTransformer
-from ldm.modules.diffusionmodules.openaimodel import UNetModel, TimestepEmbedSequential, ResBlock, Upsample, Downsample, AttentionBlock, normalization
-from ldm.models.diffusion.ddpm import LatentDiffusion
-from ldm.util import log_txt_as_img, exists, instantiate_from_config
-from ldm.models.diffusion.ddim import DDIMSampler
 
 
 def count_parameters(params):
@@ -34,12 +40,16 @@ def count_parameters(params):
     # num_params = sum(p.numel() for p in params)
     return round(num_params / 1e6, 1)
 
+
 def set_requires_grad(model, requires_grad=True):
     for param in model.parameters():
         param.requires_grad = requires_grad
 
+
 class ControlledUnetModel(UNetModel):
-    def forward(self, x, timesteps=None, context=None, control=None, only_mid_control=False, **kwargs):
+    def forward(
+        self, x, timesteps=None, context=None, control=None, only_mid_control=False, **kwargs
+    ):
         hs = []
         t_emb = timestep_embedding(timesteps, self.model_channels, repeat_only=False)
         emb = self.time_embed(t_emb)
@@ -58,41 +68,41 @@ class ControlledUnetModel(UNetModel):
             h = th.cat([h, hs.pop()], dim=1)
             h = module(h, emb, context)
         h = h.type(x.dtype)
-        
+
         return self.out(h)
 
 
 class ControlNet(nn.Module):
     def __init__(
-            self,
-            image_size,
-            in_channels,
-            model_channels,
-            out_channels,
-            hint_channels,
-            num_res_blocks,
-            attention_resolutions,
-            dropout=0,
-            channel_mult=(1, 2, 4, 8),
-            conv_resample=True,
-            dims=2,
-            use_checkpoint=False,
-            use_fp16=False,
-            num_heads=-1,
-            num_head_channels=-1,
-            num_heads_upsample=-1,
-            use_scale_shift_norm=False,
-            resblock_updown=False,
-            use_new_attention_order=False,
-            use_spatial_transformer=False,  # custom transformer support
-            transformer_depth=1,  # custom transformer support
-            context_dim=None,  # custom transformer support
-            n_embed=None,  # custom support for prediction of discrete ids into codebook of first stage vq model
-            legacy=True,
-            disable_self_attentions=None,
-            num_attention_blocks=None,
-            disable_middle_self_attn=False,
-            use_linear_in_transformer=False,
+        self,
+        image_size,
+        in_channels,
+        model_channels,
+        out_channels,
+        hint_channels,
+        num_res_blocks,
+        attention_resolutions,
+        dropout=0,
+        channel_mult=(1, 2, 4, 8),
+        conv_resample=True,
+        dims=2,
+        use_checkpoint=False,
+        use_fp16=False,
+        num_heads=-1,
+        num_head_channels=-1,
+        num_heads_upsample=-1,
+        use_scale_shift_norm=False,
+        resblock_updown=False,
+        use_new_attention_order=False,
+        use_spatial_transformer=False,    # custom transformer support
+        transformer_depth=1,    # custom transformer support
+        context_dim=None,    # custom transformer support
+        n_embed=None,    # custom support for prediction of discrete ids into codebook of first stage vq model
+        legacy=True,
+        disable_self_attentions=None,
+        num_attention_blocks=None,
+        disable_middle_self_attn=False,
+        use_linear_in_transformer=False,
     ):
         super().__init__()
         if use_spatial_transformer:
@@ -121,19 +131,28 @@ class ControlNet(nn.Module):
             self.num_res_blocks = len(channel_mult) * [num_res_blocks]
         else:
             if len(num_res_blocks) != len(channel_mult):
-                raise ValueError("provide num_res_blocks either as an int (globally constant) or "
-                                 "as a list/tuple (per-level) with the same length as channel_mult")
+                raise ValueError(
+                    "provide num_res_blocks either as an int (globally constant) or "
+                    "as a list/tuple (per-level) with the same length as channel_mult"
+                )
             self.num_res_blocks = num_res_blocks
         if disable_self_attentions is not None:
             # should be a list of booleans, indicating whether to disable self-attention in TransformerBlocks or not
             assert len(disable_self_attentions) == len(channel_mult)
         if num_attention_blocks is not None:
             assert len(num_attention_blocks) == len(self.num_res_blocks)
-            assert all(map(lambda i: self.num_res_blocks[i] >= num_attention_blocks[i], range(len(num_attention_blocks))))
-            print(f"Constructor of UNetModel received num_attention_blocks={num_attention_blocks}. "
-                  f"This option has LESS priority than attention_resolutions {attention_resolutions}, "
-                  f"i.e., in cases where num_attention_blocks[i] > 0 but 2**i not in attention_resolutions, "
-                  f"attention will still not be set.")
+            assert all(
+                map(
+                    lambda i: self.num_res_blocks[i] >= num_attention_blocks[i],
+                    range(len(num_attention_blocks))
+                )
+            )
+            print(
+                f"Constructor of UNetModel received num_attention_blocks={num_attention_blocks}. "
+                f"This option has LESS priority than attention_resolutions {attention_resolutions}, "
+                f"i.e., in cases where num_attention_blocks[i] > 0 but 2**i not in attention_resolutions, "
+                f"attention will still not be set."
+            )
 
         self.attention_resolutions = attention_resolutions
         self.dropout = dropout
@@ -154,23 +173,15 @@ class ControlNet(nn.Module):
         )
 
         self.input_hint_block = TimestepEmbedSequential(
-            conv_nd(dims, hint_channels, 16, 3, padding=1),
-            nn.SiLU(),
-            conv_nd(dims, 16, 16, 3, padding=1),
-            nn.SiLU(),
-            conv_nd(dims, 16, 32, 3, padding=1, stride=2),
-            nn.SiLU(),
-            conv_nd(dims, 32, 32, 3, padding=1),
-            nn.SiLU(),
-            conv_nd(dims, 32, 96, 3, padding=1, stride=2),
-            nn.SiLU(),
-            conv_nd(dims, 96, 96, 3, padding=1),
-            nn.SiLU(),
-            conv_nd(dims, 96, 256, 3, padding=1, stride=2),
-            nn.SiLU(),
+            conv_nd(dims, hint_channels, 16, 3, padding=1), nn.SiLU(),
+            conv_nd(dims, 16, 16, 3, padding=1), nn.SiLU(),
+            conv_nd(dims, 16, 32, 3, padding=1, stride=2), nn.SiLU(),
+            conv_nd(dims, 32, 32, 3, padding=1), nn.SiLU(),
+            conv_nd(dims, 32, 96, 3, padding=1, stride=2), nn.SiLU(),
+            conv_nd(dims, 96, 96, 3, padding=1), nn.SiLU(),
+            conv_nd(dims, 96, 256, 3, padding=1, stride=2), nn.SiLU(),
             zero_module(conv_nd(dims, 256, model_channels, 3, padding=1))
         )
-
 
     def forward(self, x, hint, timesteps, context, **kwargs):
         t_emb = timestep_embedding(timesteps, self.model_channels, repeat_only=False)
@@ -210,11 +221,25 @@ class ControlLDM(LatentDiffusion):
         cond_txt = torch.cat(cond['c_crossattn'], 1)
 
         if cond['c_concat'] is None:
-            eps = diffusion_model(x=x_noisy, timesteps=t, context=cond_txt, control=None, only_mid_control=self.only_mid_control)
+            eps = diffusion_model(
+                x=x_noisy,
+                timesteps=t,
+                context=cond_txt,
+                control=None,
+                only_mid_control=self.only_mid_control
+            )
         else:
-            control = self.control_model(x=x_noisy, hint=torch.cat(cond['c_concat'], 1), timesteps=t, context=cond_txt)
+            control = self.control_model(
+                x=x_noisy, hint=torch.cat(cond['c_concat'], 1), timesteps=t, context=cond_txt
+            )
             # control = [c * scale for c, scale in zip(control, self.control_scales)]
-            eps = diffusion_model(x=x_noisy, timesteps=t, context=cond_txt, control=control, only_mid_control=self.only_mid_control)
+            eps = diffusion_model(
+                x=x_noisy,
+                timesteps=t,
+                context=cond_txt,
+                control=control,
+                only_mid_control=self.only_mid_control
+            )
 
         return eps
 
@@ -223,11 +248,26 @@ class ControlLDM(LatentDiffusion):
         return self.get_learned_conditioning([""] * N)
 
     @torch.no_grad()
-    def log_images(self, batch, N=4, n_row=2, sample=False, ddim_steps=50, ddim_eta=0.0, return_keys=None,
-                   quantize_denoised=True, inpaint=True, plot_denoise_rows=False, plot_progressive_rows=True,
-                   plot_diffusion_rows=False, unconditional_guidance_scale=9.0, unconditional_guidance_label=None,
-                   use_ema_scope=True, num_samples=1,
-                   **kwargs):
+    def log_images(
+        self,
+        batch,
+        N=4,
+        n_row=2,
+        sample=False,
+        ddim_steps=50,
+        ddim_eta=0.0,
+        return_keys=None,
+        quantize_denoised=True,
+        inpaint=True,
+        plot_denoise_rows=False,
+        plot_progressive_rows=True,
+        plot_diffusion_rows=False,
+        unconditional_guidance_scale=9.0,
+        unconditional_guidance_label=None,
+        use_ema_scope=True,
+        num_samples=1,
+        **kwargs
+    ):
         use_ddim = ddim_steps is not None
 
         log = dict()
@@ -251,7 +291,7 @@ class ControlLDM(LatentDiffusion):
                     z_noisy = self.q_sample(x_start=z_start, t=t, noise=noise)
                     diffusion_row.append(self.decode_first_stage(z_noisy))
 
-            diffusion_row = torch.stack(diffusion_row)  # n_log_step, n_row, C, H, W
+            diffusion_row = torch.stack(diffusion_row)    # n_log_step, n_row, C, H, W
             diffusion_grid = rearrange(diffusion_row, 'n b c h w -> b n c h w')
             diffusion_grid = rearrange(diffusion_grid, 'b n c h w -> (b n) c h w')
             diffusion_grid = make_grid(diffusion_grid, nrow=diffusion_row.shape[0])
@@ -259,46 +299,62 @@ class ControlLDM(LatentDiffusion):
 
         if sample:
             # get denoise row
-            samples, z_denoise_row = self.sample_log(cond={"c_concat": [c_cat], "c_crossattn": [c]},
-                                                     batch_size=N, ddim=use_ddim,
-                                                     ddim_steps=ddim_steps, eta=ddim_eta)
+            samples, z_denoise_row = self.sample_log(
+                cond={"c_concat": [c_cat], "c_crossattn": [c]},
+                batch_size=N,
+                ddim=use_ddim,
+                ddim_steps=ddim_steps,
+                eta=ddim_eta
+            )
             x_samples = self.decode_first_stage(samples)
             log["samples"] = x_samples
             if plot_denoise_rows:
                 denoise_grid = self._get_denoise_row_from_list(z_denoise_row)
                 log["denoise_row"] = denoise_grid
 
-        if kwargs['split'] == 'train': 
+        if kwargs['split'] == 'train':
             if unconditional_guidance_scale > 1.0:
                 uc_cross = self.get_unconditional_conditioning(N)
-                uc_cat = c_cat  # torch.zeros_like(c_cat)
+                uc_cat = c_cat    # torch.zeros_like(c_cat)
 
                 uc_full = {"c_concat": [uc_cat], "c_crossattn": [uc_cross]}
-                samples_cfg, _ = self.sample_log(cond={"c_concat": [c_cat], "c_crossattn": [c]},
-                                                batch_size=N, ddim=use_ddim,
-                                                ddim_steps=ddim_steps, eta=ddim_eta,
-                                                unconditional_guidance_scale=unconditional_guidance_scale,
-                                                unconditional_conditioning=uc_full,
-                                                )
+                samples_cfg, _ = self.sample_log(
+                    cond={"c_concat": [c_cat], "c_crossattn": [c]},
+                    batch_size=N,
+                    ddim=use_ddim,
+                    ddim_steps=ddim_steps,
+                    eta=ddim_eta,
+                    unconditional_guidance_scale=unconditional_guidance_scale,
+                    unconditional_conditioning=uc_full,
+                )
                 x_samples_cfg = self.decode_first_stage(samples_cfg)
                 log[f"samples_cfg_scale_{unconditional_guidance_scale:.2f}"] = x_samples_cfg
-        
-        else: 
+
+        else:
             if unconditional_guidance_scale > 1.0:
                 # uc_cross = self.get_unconditional_conditioning(N)
                 # uc_cat = c_cat  # torch.zeros_like(c_cat)
-                
+
                 c_cat = torch.stack([c_cat[0] for _ in range(num_samples)], dim=0).clone()
 
-                cond = {"c_concat": [c_cat], "c_crossattn": [self.get_learned_conditioning([batch['txt'][0]] * num_samples)]}
-                uc_full = {"c_concat": [c_cat], "c_crossattn": [self.get_learned_conditioning([''] * num_samples)]}
+                cond = {
+                    "c_concat": [c_cat], "c_crossattn":
+                    [self.get_learned_conditioning([batch['txt'][0]] * num_samples)]
+                }
+                uc_full = {
+                    "c_concat": [c_cat], "c_crossattn":
+                    [self.get_learned_conditioning([''] * num_samples)]
+                }
 
-                samples_cfg, _ = self.sample_log(cond=cond, # cond={"c_concat": [c_cat], "c_crossattn": [c]},
-                                                batch_size=num_samples, ddim=use_ddim,
-                                                ddim_steps=ddim_steps, eta=ddim_eta,
-                                                unconditional_guidance_scale=unconditional_guidance_scale,
-                                                unconditional_conditioning=uc_full,
-                                                )
+                samples_cfg, _ = self.sample_log(
+                    cond=cond,    # cond={"c_concat": [c_cat], "c_crossattn": [c]},
+                    batch_size=num_samples,
+                    ddim=use_ddim,
+                    ddim_steps=ddim_steps,
+                    eta=ddim_eta,
+                    unconditional_guidance_scale=unconditional_guidance_scale,
+                    unconditional_conditioning=uc_full,
+                )
                 x_samples_cfg = self.decode_first_stage(samples_cfg)
                 log[f"samples_cfg_scale_{unconditional_guidance_scale:.2f}"] = x_samples_cfg
 
@@ -309,7 +365,9 @@ class ControlLDM(LatentDiffusion):
         ddim_sampler = DDIMSampler(self)
         b, c, h, w = cond["c_concat"][0].shape
         shape = (self.channels, h // 8, w // 8)
-        samples, intermediates = ddim_sampler.sample(ddim_steps, batch_size, shape, cond, verbose=False, **kwargs)
+        samples, intermediates = ddim_sampler.sample(
+            ddim_steps, batch_size, shape, cond, verbose=False, **kwargs
+        )
         return samples, intermediates
 
     def configure_optimizers(self):

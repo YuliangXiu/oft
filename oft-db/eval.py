@@ -15,51 +15,59 @@
 
 import argparse
 import hashlib
+import json
 import logging
 import math
 import os
 import warnings
 from pathlib import Path
 
+import lpips
 import numpy as np
+import requests
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
+import torchvision.transforms.functional as TF
 import transformers
 from packaging import version
 from PIL import Image
-from torch.utils.data import Dataset, DataLoader
-from torchvision import transforms
-from tqdm.auto import tqdm
-from transformers import AutoTokenizer, PretrainedConfig, ViTFeatureExtractor, ViTModel
-
-import lpips
-import json
-from PIL import Image
-import requests
-from transformers import AutoProcessor, AutoTokenizer, CLIPModel
-import torchvision.transforms.functional as TF
 from torch.nn.functional import cosine_similarity
-from torchvision.transforms import Compose, ToTensor, Normalize, Resize, ToPILImage
-
+from torch.utils.data import DataLoader, Dataset
+from torchvision import transforms
+from torchvision.transforms import (
+    Compose,
+    Normalize,
+    Resize,
+    ToPILImage,
+    ToTensor,
+)
+from tqdm.auto import tqdm
+from transformers import (
+    AutoProcessor,
+    AutoTokenizer,
+    CLIPModel,
+    PretrainedConfig,
+    ViTFeatureExtractor,
+    ViTModel,
+)
 
 subject_names = [
-    "backpack", "backpack_dog", "bear_plushie", "berry_bowl", "can",
-    "candle", "cat", "cat2", "clock", "colorful_sneaker",
-    "dog", "dog2", "dog3", "dog5", "dog6",
-    "dog7", "dog8", "duck_toy", "fancy_boot", "grey_sloth_plushie",
-    "monster_toy", "pink_sunglasses", "poop_emoji", "rc_car", "red_cartoon",
-    "robot_toy", "shiny_sneaker", "teapot", "vase", "wolf_plushie"
+    "backpack", "backpack_dog", "bear_plushie", "berry_bowl", "can", "candle", "cat", "cat2",
+    "clock", "colorful_sneaker", "dog", "dog2", "dog3", "dog5", "dog6", "dog7", "dog8", "duck_toy",
+    "fancy_boot", "grey_sloth_plushie", "monster_toy", "pink_sunglasses", "poop_emoji", "rc_car",
+    "red_cartoon", "robot_toy", "shiny_sneaker", "teapot", "vase", "wolf_plushie"
 ]
 '''
 subject_names = ["colorful_sneaker"]
 '''
 
+
 class PromptDatasetCLIP(Dataset):
     def __init__(self, image_dir, json_file, tokenizer, processor, epoch=None):
         with open(json_file, 'r') as json_file:
-            metadata_dict  = json.load(json_file)
-        
+            metadata_dict = json.load(json_file)
+
         self.image_dir = image_dir
         self.image_lst = []
         self.prompt_lst = []
@@ -68,11 +76,13 @@ class PromptDatasetCLIP(Dataset):
                 data_dir = os.path.join(self.image_dir, value['data_dir'], str(epoch))
             else:
                 data_dir = os.path.join(self.image_dir, value['data_dir'])
-            image_files = [os.path.join(data_dir, f) for f in os.listdir(data_dir) if f.endswith(".png")]
+            image_files = [
+                os.path.join(data_dir, f) for f in os.listdir(data_dir) if f.endswith(".png")
+            ]
             self.image_lst.extend(image_files[:4])
             class_prompts = [value['instance_prompt']] * len(image_files)
             self.prompt_lst.extend(class_prompts[:4])
-        
+
         print('data_list', len(self.image_lst), len(self.prompt_lst))
         self.tokenizer = tokenizer
         self.processor = processor
@@ -96,14 +106,16 @@ class PromptDatasetCLIP(Dataset):
             return image_inputs, prompt_inputs
 
 
-
 class PairwiseImageDatasetCLIP(Dataset):
     def __init__(self, subject, data_dir_A, data_dir_B, processor, epoch):
         self.data_dir_A = data_dir_A
         self.data_dir_B = data_dir_B
-        
+
         self.data_dir_A = os.path.join(self.data_dir_A, subject)
-        self.image_files_A = [os.path.join(self.data_dir_A, f) for f in os.listdir(self.data_dir_A) if f.endswith(".jpg")]
+        self.image_files_A = [
+            os.path.join(self.data_dir_A, f)
+            for f in os.listdir(self.data_dir_A) if f.endswith(".jpg")
+        ]
 
         subject = subject + '-'
         self.image_files_B = []
@@ -114,7 +126,10 @@ class PairwiseImageDatasetCLIP(Dataset):
                     data_dir_B = os.path.join(self.data_dir_B, subfolder, str(epoch))
                 else:
                     data_dir_B = os.path.join(self.data_dir_B, subfolder)
-                image_files_b = [os.path.join(data_dir_B, f) for f in os.listdir(data_dir_B) if f.endswith(".png")]
+                image_files_b = [
+                    os.path.join(data_dir_B, f)
+                    for f in os.listdir(data_dir_B) if f.endswith(".png")
+                ]
                 self.image_files_B.extend(image_files_b[:4])
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -126,13 +141,14 @@ class PairwiseImageDatasetCLIP(Dataset):
     def __getitem__(self, index):
         index_A = index // len(self.image_files_B)
         index_B = index % len(self.image_files_B)
-        
-        image_A = Image.open(self.image_files_A[index_A]) # .convert("RGB")
-        image_B = Image.open(self.image_files_B[index_B]) # .convert("RGB")
+
+        image_A = Image.open(self.image_files_A[index_A])    # .convert("RGB")
+        image_B = Image.open(self.image_files_B[index_B])    # .convert("RGB")
 
         extrema_A = image_A.getextrema()
         extrema_B = image_B.getextrema()
-        if all(min_val == max_val == 0 for min_val, max_val in extrema_A) or all(min_val == max_val == 0 for min_val, max_val in extrema_B):
+        if all(min_val == max_val == 0 for min_val, max_val in extrema_A
+              ) or all(min_val == max_val == 0 for min_val, max_val in extrema_B):
             return None, None
         else:
             inputs_A = self.processor(images=image_A, return_tensors="pt")
@@ -145,20 +161,26 @@ class PairwiseImageDatasetDINO(Dataset):
     def __init__(self, subject, data_dir_A, data_dir_B, feature_extractor, epoch):
         self.data_dir_A = data_dir_A
         self.data_dir_B = data_dir_B
-        
+
         self.data_dir_A = os.path.join(self.data_dir_A, subject)
-        self.image_files_A = [os.path.join(self.data_dir_A, f) for f in os.listdir(self.data_dir_A) if f.endswith(".jpg")]
+        self.image_files_A = [
+            os.path.join(self.data_dir_A, f)
+            for f in os.listdir(self.data_dir_A) if f.endswith(".jpg")
+        ]
 
         subject = subject + '-'
         self.image_files_B = []
-	    # Get image files from each subfolder in data A
+        # Get image files from each subfolder in data A
         for subfolder in os.listdir(data_dir_B):
             if subject in subfolder:
                 if epoch is not None:
                     data_dir_B = os.path.join(self.data_dir_B, subfolder, str(epoch))
                 else:
                     data_dir_B = os.path.join(self.data_dir_B, subfolder)
-                image_files_b = [os.path.join(data_dir_B, f) for f in os.listdir(data_dir_B) if f.endswith(".png")]        
+                image_files_b = [
+                    os.path.join(data_dir_B, f)
+                    for f in os.listdir(data_dir_B) if f.endswith(".png")
+                ]
                 self.image_files_B.extend(image_files_b[:4])
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -170,13 +192,14 @@ class PairwiseImageDatasetDINO(Dataset):
     def __getitem__(self, index):
         index_A = index // len(self.image_files_B)
         index_B = index % len(self.image_files_B)
-        
-        image_A = Image.open(self.image_files_A[index_A]) # .convert("RGB")
-        image_B = Image.open(self.image_files_B[index_B]) # .convert("RGB")
+
+        image_A = Image.open(self.image_files_A[index_A])    # .convert("RGB")
+        image_B = Image.open(self.image_files_B[index_B])    # .convert("RGB")
 
         extrema_A = image_A.getextrema()
         extrema_B = image_B.getextrema()
-        if all(min_val == max_val == 0 for min_val, max_val in extrema_A) or all(min_val == max_val == 0 for min_val, max_val in extrema_B):
+        if all(min_val == max_val == 0 for min_val, max_val in extrema_A
+              ) or all(min_val == max_val == 0 for min_val, max_val in extrema_B):
             return None, None
         else:
             inputs_A = self.feature_extractor(images=image_A, return_tensors="pt")
@@ -189,12 +212,18 @@ class SelfPairwiseImageDatasetCLIP(Dataset):
     def __init__(self, subject, data_dir, processor):
         self.data_dir_A = data_dir
         self.data_dir_B = data_dir
-        
+
         self.data_dir_A = os.path.join(self.data_dir_A, subject)
-        self.image_files_A = [os.path.join(self.data_dir_A, f) for f in os.listdir(self.data_dir_A) if f.endswith(".jpg")]
+        self.image_files_A = [
+            os.path.join(self.data_dir_A, f)
+            for f in os.listdir(self.data_dir_A) if f.endswith(".jpg")
+        ]
 
         self.data_dir_B = os.path.join(self.data_dir_B, subject)
-        self.image_files_B = [os.path.join(self.data_dir_B, f) for f in os.listdir(self.data_dir_B) if f.endswith(".jpg")]
+        self.image_files_B = [
+            os.path.join(self.data_dir_B, f)
+            for f in os.listdir(self.data_dir_B) if f.endswith(".jpg")
+        ]
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.processor = processor
@@ -210,9 +239,9 @@ class SelfPairwiseImageDatasetCLIP(Dataset):
         if index_B >= index_A:
             index_B += 1
 
-        image_A = Image.open(self.image_files_A[index_A]) # .convert("RGB")
-        image_B = Image.open(self.image_files_B[index_B]) # .convert("RGB")
-        
+        image_A = Image.open(self.image_files_A[index_A])    # .convert("RGB")
+        image_B = Image.open(self.image_files_B[index_B])    # .convert("RGB")
+
         inputs_A = self.processor(images=image_A, return_tensors="pt")
         inputs_B = self.processor(images=image_B, return_tensors="pt")
 
@@ -223,12 +252,18 @@ class SelfPairwiseImageDatasetDINO(Dataset):
     def __init__(self, subject, data_dir, feature_extractor):
         self.data_dir_A = data_dir
         self.data_dir_B = data_dir
-        
+
         self.data_dir_A = os.path.join(self.data_dir_A, subject)
-        self.image_files_A = [os.path.join(self.data_dir_A, f) for f in os.listdir(self.data_dir_A) if f.endswith(".jpg")]
+        self.image_files_A = [
+            os.path.join(self.data_dir_A, f)
+            for f in os.listdir(self.data_dir_A) if f.endswith(".jpg")
+        ]
 
         self.data_dir_B = os.path.join(self.data_dir_B, subject)
-        self.image_files_B = [os.path.join(self.data_dir_B, f) for f in os.listdir(self.data_dir_B) if f.endswith(".jpg")]
+        self.image_files_B = [
+            os.path.join(self.data_dir_B, f)
+            for f in os.listdir(self.data_dir_B) if f.endswith(".jpg")
+        ]
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.feature_extractor = feature_extractor
@@ -244,9 +279,9 @@ class SelfPairwiseImageDatasetDINO(Dataset):
         if index_B >= index_A:
             index_B += 1
 
-        image_A = Image.open(self.image_files_A[index_A]) # .convert("RGB")
-        image_B = Image.open(self.image_files_B[index_B]) # .convert("RGB")
-        
+        image_A = Image.open(self.image_files_A[index_A])    # .convert("RGB")
+        image_B = Image.open(self.image_files_B[index_B])    # .convert("RGB")
+
         inputs_A = self.feature_extractor(images=image_A, return_tensors="pt")
         inputs_B = self.feature_extractor(images=image_B, return_tensors="pt")
 
@@ -257,12 +292,18 @@ class SelfPairwiseImageDatasetLPIPS(Dataset):
     def __init__(self, subject, data_dir):
         self.data_dir_A = data_dir
         self.data_dir_B = data_dir
-        
+
         self.data_dir_A = os.path.join(self.data_dir_A, subject)
-        self.image_files_A = [os.path.join(self.data_dir_A, f) for f in os.listdir(self.data_dir_A) if f.endswith(".jpg")]
+        self.image_files_A = [
+            os.path.join(self.data_dir_A, f)
+            for f in os.listdir(self.data_dir_A) if f.endswith(".jpg")
+        ]
 
         self.data_dir_B = os.path.join(self.data_dir_B, subject)
-        self.image_files_B = [os.path.join(self.data_dir_B, f) for f in os.listdir(self.data_dir_B) if f.endswith(".jpg")]
+        self.image_files_B = [
+            os.path.join(self.data_dir_B, f)
+            for f in os.listdir(self.data_dir_B) if f.endswith(".jpg")
+        ]
 
         self.transform = Compose([
             Resize((512, 512)),
@@ -282,13 +323,14 @@ class SelfPairwiseImageDatasetLPIPS(Dataset):
         # Ensure we don't have the same index for A and B
         if index_B >= index_A:
             index_B += 1
-        
-        image_A = Image.open(self.image_files_A[index_A]) # .convert("RGB")
-        image_B = Image.open(self.image_files_B[index_B]) # .convert("RGB")
+
+        image_A = Image.open(self.image_files_A[index_A])    # .convert("RGB")
+        image_B = Image.open(self.image_files_B[index_B])    # .convert("RGB")
 
         extrema_A = image_A.getextrema()
         extrema_B = image_B.getextrema()
-        if all(min_val == max_val == 0 for min_val, max_val in extrema_A) or all(min_val == max_val == 0 for min_val, max_val in extrema_B):
+        if all(min_val == max_val == 0 for min_val, max_val in extrema_A
+              ) or all(min_val == max_val == 0 for min_val, max_val in extrema_B):
             return None, None
         else:
             if self.transform:
@@ -302,9 +344,12 @@ class PairwiseImageDatasetLPIPS(Dataset):
     def __init__(self, subject, data_dir_A, data_dir_B, epoch):
         self.data_dir_A = data_dir_A
         self.data_dir_B = data_dir_B
-        
+
         self.data_dir_A = os.path.join(self.data_dir_A, subject)
-        self.image_files_A = [os.path.join(self.data_dir_A, f) for f in os.listdir(self.data_dir_A) if f.endswith(".jpg")]
+        self.image_files_A = [
+            os.path.join(self.data_dir_A, f)
+            for f in os.listdir(self.data_dir_A) if f.endswith(".jpg")
+        ]
 
         subject = subject + '-'
         self.image_files_B = []
@@ -315,7 +360,10 @@ class PairwiseImageDatasetLPIPS(Dataset):
                     data_dir_B = os.path.join(self.data_dir_B, subfolder, str(epoch))
                 else:
                     data_dir_B = os.path.join(self.data_dir_B, subfolder)
-                image_files_b = [os.path.join(data_dir_B, f) for f in os.listdir(data_dir_B) if f.endswith(".png")]
+                image_files_b = [
+                    os.path.join(data_dir_B, f)
+                    for f in os.listdir(data_dir_B) if f.endswith(".png")
+                ]
                 self.image_files_B.extend(image_files_b[:4])
 
         self.transform = Compose([
@@ -331,13 +379,14 @@ class PairwiseImageDatasetLPIPS(Dataset):
     def __getitem__(self, index):
         index_A = index // len(self.image_files_B)
         index_B = index % len(self.image_files_B)
-        
-        image_A = Image.open(self.image_files_A[index_A]) # .convert("RGB")
-        image_B = Image.open(self.image_files_B[index_B]) # .convert("RGB")
+
+        image_A = Image.open(self.image_files_A[index_A])    # .convert("RGB")
+        image_B = Image.open(self.image_files_B[index_B])    # .convert("RGB")
 
         extrema_A = image_A.getextrema()
         extrema_B = image_B.getextrema()
-        if all(min_val == max_val == 0 for min_val, max_val in extrema_A) or all(min_val == max_val == 0 for min_val, max_val in extrema_B):
+        if all(min_val == max_val == 0 for min_val, max_val in extrema_A
+              ) or all(min_val == max_val == 0 for min_val, max_val in extrema_B):
             return None, None
         else:
             if self.transform:
@@ -400,16 +449,20 @@ def clip_image(image_dir, epoch=None):
             inputs_A, inputs_B = dataset[i]
             if inputs_A is not None and inputs_B is not None:
                 inputs_A['pixel_values'] = inputs_A['pixel_values'].to(device)
-                inputs_B['pixel_values'] = inputs_B['pixel_values'].to(device) 
+                inputs_B['pixel_values'] = inputs_B['pixel_values'].to(device)
 
                 image_A_features = model.get_image_features(**inputs_A)
                 image_B_features = model.get_image_features(**inputs_B)
 
-                image_A_features = image_A_features / image_A_features.norm(p=2, dim=-1, keepdim=True)
-                image_B_features = image_B_features / image_B_features.norm(p=2, dim=-1, keepdim=True)
-            
+                image_A_features = image_A_features / image_A_features.norm(
+                    p=2, dim=-1, keepdim=True
+                )
+                image_B_features = image_B_features / image_B_features.norm(
+                    p=2, dim=-1, keepdim=True
+                )
+
                 logit_scale = model.logit_scale.exp()
-                sim = torch.matmul(image_A_features, image_B_features.t()) # * logit_scale
+                sim = torch.matmul(image_A_features, image_B_features.t())    # * logit_scale
                 similarity.append(sim.item())
 
     mean_similarity = torch.tensor(similarity).mean().item()
@@ -433,7 +486,7 @@ def dino(image_dir, epoch=None):
             inputs_A, inputs_B = dataset[i]
             if inputs_A is not None and inputs_B is not None:
                 inputs_A['pixel_values'] = inputs_A['pixel_values'].to(device)
-                inputs_B['pixel_values'] = inputs_B['pixel_values'].to(device) 
+                inputs_B['pixel_values'] = inputs_B['pixel_values'].to(device)
 
                 outputs_A = model(**inputs_A)
                 image_A_features = outputs_A.last_hidden_state[:, 0, :]
@@ -441,10 +494,14 @@ def dino(image_dir, epoch=None):
                 outputs_B = model(**inputs_B)
                 image_B_features = outputs_B.last_hidden_state[:, 0, :]
 
-                image_A_features = image_A_features / image_A_features.norm(p=2, dim=-1, keepdim=True)
-                image_B_features = image_B_features / image_B_features.norm(p=2, dim=-1, keepdim=True)
+                image_A_features = image_A_features / image_A_features.norm(
+                    p=2, dim=-1, keepdim=True
+                )
+                image_B_features = image_B_features / image_B_features.norm(
+                    p=2, dim=-1, keepdim=True
+                )
 
-                sim = torch.matmul(image_A_features, image_B_features.t()) # * logit_scale
+                sim = torch.matmul(image_A_features, image_B_features.t())    # * logit_scale
                 similarity.append(sim.item())
 
     mean_similarity = torch.tensor(similarity).mean().item()
@@ -464,7 +521,7 @@ def lpips_image(image_dir, epoch=None):
     for subject in subject_names:
         dataset = PairwiseImageDatasetLPIPS(subject, './data', image_dir, epoch)
         # dataset = SelfPairwiseImageDatasetLPIPS(subject, './data')
-        
+
         for i in tqdm(range(len(dataset))):
             image_A, image_B = dataset[i]
             if image_A is not None and image_B is not None:
@@ -483,10 +540,12 @@ def lpips_image(image_dir, epoch=None):
 
 
 if __name__ == "__main__":
-    image_dir = './log_lora' # './log_db' './log_lora' './log_cot'
-    epoch = 8 # None, 2, 4, 6
+    image_dir = './log_lora'    # './log_db' './log_lora' './log_cot'
+    epoch = 8    # None, 2, 4, 6
 
-    sim, criterion = clip_text(image_dir, epoch) # db: 0.1687191128730774 # lora: 0.1668722778558731 # cot: 0.16917628049850464
+    sim, criterion = clip_text(
+        image_dir, epoch
+    )    # db: 0.1687191128730774 # lora: 0.1668722778558731 # cot: 0.16917628049850464
     # sim, criterion = dino(image_dir, epoch)
     # sim, criterion = clip_image(image_dir, epoch) # db: 18.00 # lora: 18.00 # cot: 18.00
     # sim, criterion = lpips_image(image_dir, epoch) # db: 0.737432599067688 # lora: 18.00 # cot: 0.7569993138313293
@@ -496,7 +555,7 @@ if __name__ == "__main__":
     else:
         name = image_dir
 
-    filename = "results.txt"  # the name of the file to save the value to
+    filename = "results.txt"    # the name of the file to save the value to
     # Check if file already exists
     file_exists = os.path.isfile(filename)
 

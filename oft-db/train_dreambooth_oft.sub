@@ -1,0 +1,15 @@
+executable = ./train_dreambooth_oft.sh
+arguments = $(idx)
+exp_name = train_db_oft
+error = ./log/$(exp_name).$(Process).err
+output = ./log/$(exp_name).$(Process).out
+log = ./log/$(exp_name).$(Process).log
+
+request_memory = 20000
+request_disk = 10G
+request_cpus = 6
+request_gpus = 1
+requirements = TARGET.CUDACapability > 7.5 
+requirements = TARGET.CUDAGlobalMemoryMb  > 50000
+
+queue 1 idx from seq 0 0 |

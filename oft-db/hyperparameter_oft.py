@@ -21,23 +21,17 @@ import os
 import warnings
 from pathlib import Path
 
+import diffusers
 import numpy as np
+import requests
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
+import torchvision.transforms.functional as TF
 import transformers
 from accelerate import Accelerator
 from accelerate.logging import get_logger
 from accelerate.utils import ProjectConfiguration, set_seed
-from huggingface_hub import create_repo, upload_folder
-from packaging import version
-from PIL import Image
-from torch.utils.data import Dataset
-from torchvision import transforms
-from tqdm.auto import tqdm
-from transformers import AutoTokenizer, PretrainedConfig
-
-import diffusers
 from diffusers import (
     AutoencoderKL,
     DDPMScheduler,
@@ -48,14 +42,21 @@ from diffusers import (
 from diffusers.loaders import AttnProcsLayers
 from diffusers.models.attention_processor import COTAttnProcessor
 from diffusers.optimization import get_scheduler
+from diffusers.utils import MHE_COT as MHE
 from diffusers.utils import check_min_version, is_wandb_available
 from diffusers.utils.import_utils import is_xformers_available
-from diffusers.utils import MHE_COT as MHE
-
+from huggingface_hub import create_repo, upload_folder
+from packaging import version
 from PIL import Image
-import requests
-from transformers import AutoProcessor, AutoTokenizer, CLIPModel
-import torchvision.transforms.functional as TF
+from torch.utils.data import Dataset
+from torchvision import transforms
+from tqdm.auto import tqdm
+from transformers import (
+    AutoProcessor,
+    AutoTokenizer,
+    CLIPModel,
+    PretrainedConfig,
+)
 
 # Will error if the minimal version of diffusers is not installed. Remove at your own risks.
 check_min_version("0.16.0.dev0")
@@ -106,7 +107,9 @@ def import_model_class_from_model_name_or_path(pretrained_model_name_or_path: st
 
         return CLIPTextModel
     elif model_class == "RobertaSeriesModelWithTransformation":
-        from diffusers.pipelines.alt_diffusion.modeling_roberta_series import RobertaSeriesModelWithTransformation
+        from diffusers.pipelines.alt_diffusion.modeling_roberta_series import (
+            RobertaSeriesModelWithTransformation,
+        )
 
         return RobertaSeriesModelWithTransformation
     else:
@@ -172,7 +175,8 @@ def parse_args(input_args=None):
         "--test_prompt",
         type=str,
         default=None,
-        help="A prompt that is used during validation to verify that the model is keeps class prior.",
+        help=
+        "A prompt that is used during validation to verify that the model is keeps class prior.",
     )
     parser.add_argument(
         "--num_validation_images",
@@ -195,7 +199,12 @@ def parse_args(input_args=None):
         action="store_true",
         help="Flag to add prior preservation loss.",
     )
-    parser.add_argument("--prior_loss_weight", type=float, default=1.0, help="The weight of prior preservation loss.")
+    parser.add_argument(
+        "--prior_loss_weight",
+        type=float,
+        default=1.0,
+        help="The weight of prior preservation loss."
+    )
     parser.add_argument(
         "--num_class_images",
         type=int,
@@ -231,10 +240,16 @@ def parse_args(input_args=None):
         ),
     )
     parser.add_argument(
-        "--train_batch_size", type=int, default=4, help="Batch size (per device) for the training dataloader."
+        "--train_batch_size",
+        type=int,
+        default=4,
+        help="Batch size (per device) for the training dataloader."
     )
     parser.add_argument(
-        "--sample_batch_size", type=int, default=4, help="Batch size (per device) for sampling images."
+        "--sample_batch_size",
+        type=int,
+        default=4,
+        help="Batch size (per device) for sampling images."
     )
     parser.add_argument("--num_train_epochs", type=int, default=1)
     parser.add_argument(
@@ -281,7 +296,8 @@ def parse_args(input_args=None):
     parser.add_argument(
         "--gradient_checkpointing",
         action="store_true",
-        help="Whether or not to use gradient checkpointing to save memory at the expense of slower backward pass.",
+        help=
+        "Whether or not to use gradient checkpointing to save memory at the expense of slower backward pass.",
     )
     parser.add_argument(
         "--learning_rate",
@@ -293,7 +309,8 @@ def parse_args(input_args=None):
         "--scale_lr",
         action="store_true",
         default=False,
-        help="Scale the learning rate by the number of GPUs, gradient accumulation steps, and batch size.",
+        help=
+        "Scale the learning rate by the number of GPUs, gradient accumulation steps, and batch size.",
     )
     parser.add_argument(
         "--lr_scheduler",
@@ -305,7 +322,10 @@ def parse_args(input_args=None):
         ),
     )
     parser.add_argument(
-        "--lr_warmup_steps", type=int, default=500, help="Number of steps for the warmup in the lr scheduler."
+        "--lr_warmup_steps",
+        type=int,
+        default=500,
+        help="Number of steps for the warmup in the lr scheduler."
     )
     parser.add_argument(
         "--lr_num_cycles",
@@ -313,7 +333,9 @@ def parse_args(input_args=None):
         default=1,
         help="Number of hard resets of the lr in cosine_with_restarts scheduler.",
     )
-    parser.add_argument("--lr_power", type=float, default=1.0, help="Power factor of the polynomial scheduler.")
+    parser.add_argument(
+        "--lr_power", type=float, default=1.0, help="Power factor of the polynomial scheduler."
+    )
     parser.add_argument(
         "--dataloader_num_workers",
         type=int,
@@ -323,15 +345,32 @@ def parse_args(input_args=None):
         ),
     )
     parser.add_argument(
-        "--use_8bit_adam", action="store_true", help="Whether or not to use 8-bit Adam from bitsandbytes."
+        "--use_8bit_adam",
+        action="store_true",
+        help="Whether or not to use 8-bit Adam from bitsandbytes."
     )
-    parser.add_argument("--adam_beta1", type=float, default=0.9, help="The beta1 parameter for the Adam optimizer.")
-    parser.add_argument("--adam_beta2", type=float, default=0.999, help="The beta2 parameter for the Adam optimizer.")
-    parser.add_argument("--adam_weight_decay", type=float, default=1e-2, help="Weight decay to use.")
-    parser.add_argument("--adam_epsilon", type=float, default=1e-08, help="Epsilon value for the Adam optimizer")
+    parser.add_argument(
+        "--adam_beta1", type=float, default=0.9, help="The beta1 parameter for the Adam optimizer."
+    )
+    parser.add_argument(
+        "--adam_beta2",
+        type=float,
+        default=0.999,
+        help="The beta2 parameter for the Adam optimizer."
+    )
+    parser.add_argument(
+        "--adam_weight_decay", type=float, default=1e-2, help="Weight decay to use."
+    )
+    parser.add_argument(
+        "--adam_epsilon", type=float, default=1e-08, help="Epsilon value for the Adam optimizer"
+    )
     parser.add_argument("--max_grad_norm", default=1.0, type=float, help="Max gradient norm.")
-    parser.add_argument("--push_to_hub", action="store_true", help="Whether or not to push the model to the Hub.")
-    parser.add_argument("--hub_token", type=str, default=None, help="The token to use to push to the Model Hub.")
+    parser.add_argument(
+        "--push_to_hub", action="store_true", help="Whether or not to push the model to the Hub."
+    )
+    parser.add_argument(
+        "--hub_token", type=str, default=None, help="The token to use to push to the Model Hub."
+    )
     parser.add_argument(
         "--hub_model_id",
         type=str,
@@ -385,23 +424,23 @@ def parse_args(input_args=None):
             " 1.10.and an Nvidia Ampere GPU.  Default to  fp16 if a GPU is available else fp32."
         ),
     )
-    parser.add_argument("--local_rank", type=int, default=-1, help="For distributed training: local_rank")
     parser.add_argument(
-        "--enable_xformers_memory_efficient_attention", action="store_true", help="Whether or not to use xformers."
+        "--local_rank", type=int, default=-1, help="For distributed training: local_rank"
+    )
+    parser.add_argument(
+        "--enable_xformers_memory_efficient_attention",
+        action="store_true",
+        help="Whether or not to use xformers."
     )
     parser.add_argument(
         "--name",
         type=str,
-        help=(
-            "The name of the current experiment run, consists of [data]-[prompt]"
-        ),
+        help=("The name of the current experiment run, consists of [data]-[prompt]"),
     )
     parser.add_argument(
         "--eps",
         type=float,
-        help=(
-            "The control strength of COT. The freedom of rotation."
-        ),
+        help=("The control strength of COT. The freedom of rotation."),
     )
     if input_args is not None:
         args = parser.parse_args(input_args)
@@ -432,7 +471,6 @@ class DreamBoothDataset(Dataset):
     A dataset to prepare the instance and class images with the prompts for fine-tuning the model.
     It pre-processes the images and the tokenizes prompts.
     """
-
     def __init__(
         self,
         instance_data_root,
@@ -470,14 +508,12 @@ class DreamBoothDataset(Dataset):
         else:
             self.class_data_root = None
 
-        self.image_transforms = transforms.Compose(
-            [
-                transforms.Resize(size, interpolation=transforms.InterpolationMode.BILINEAR),
-                transforms.CenterCrop(size) if center_crop else transforms.RandomCrop(size),
-                transforms.ToTensor(),
-                transforms.Normalize([0.5], [0.5]),
-            ]
-        )
+        self.image_transforms = transforms.Compose([
+            transforms.Resize(size, interpolation=transforms.InterpolationMode.BILINEAR),
+            transforms.CenterCrop(size) if center_crop else transforms.RandomCrop(size),
+            transforms.ToTensor(),
+            transforms.Normalize([0.5], [0.5]),
+        ])
 
     def __len__(self):
         return self._length
@@ -536,7 +572,6 @@ def collate_fn(examples, with_prior_preservation=False):
 
 class PromptDataset(Dataset):
     "A simple dataset to prepare the prompts to generate class images on multiple GPUs."
-
     def __init__(self, prompt, num_samples):
         self.prompt = prompt
         self.num_samples = num_samples
@@ -559,7 +594,7 @@ def main(args):
     wandb_init = {
         "wandb": {
             "name": args.name,
-            # "project": args.project,
+    # "project": args.project,
         }
     }
 
@@ -573,7 +608,9 @@ def main(args):
 
     if args.report_to == "wandb":
         if not is_wandb_available():
-            raise ImportError("Make sure to install wandb if you want to use it for logging during training.")
+            raise ImportError(
+                "Make sure to install wandb if you want to use it for logging during training."
+            )
         import wandb
 
     # Currently, it's not possible to do gradient accumulation when training two models with accelerate.accumulate
@@ -597,10 +634,11 @@ def main(args):
     if args.seed is not None:
         set_seed(args.seed)
 
-
         # Load the tokenizer
     if args.tokenizer_name:
-        tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_name, revision=args.revision, use_fast=False)
+        tokenizer = AutoTokenizer.from_pretrained(
+            args.tokenizer_name, revision=args.revision, use_fast=False
+        )
     elif args.pretrained_model_name_or_path:
         tokenizer = AutoTokenizer.from_pretrained(
             args.pretrained_model_name_or_path,
@@ -610,14 +648,20 @@ def main(args):
         )
 
     # import correct text encoder class
-    text_encoder_cls = import_model_class_from_model_name_or_path(args.pretrained_model_name_or_path, args.revision)
+    text_encoder_cls = import_model_class_from_model_name_or_path(
+        args.pretrained_model_name_or_path, args.revision
+    )
 
     # Load scheduler and models
-    noise_scheduler = DDPMScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler")
+    noise_scheduler = DDPMScheduler.from_pretrained(
+        args.pretrained_model_name_or_path, subfolder="scheduler"
+    )
     text_encoder = text_encoder_cls.from_pretrained(
         args.pretrained_model_name_or_path, subfolder="text_encoder", revision=args.revision
     )
-    vae = AutoencoderKL.from_pretrained(args.pretrained_model_name_or_path, subfolder="vae", revision=args.revision)
+    vae = AutoencoderKL.from_pretrained(
+        args.pretrained_model_name_or_path, subfolder="vae", revision=args.revision
+    )
     unet = UNet2DConditionModel.from_pretrained(
         args.pretrained_model_name_or_path, subfolder="unet", revision=args.revision
     )
@@ -656,7 +700,9 @@ def main(args):
     # Set correct cot layers
     cot_attn_procs = {}
     for name in unet.attn_processors.keys():
-        cross_attention_dim = None if name.endswith("attn1.processor") else unet.config.cross_attention_dim
+        cross_attention_dim = None if name.endswith(
+            "attn1.processor"
+        ) else unet.config.cross_attention_dim
         if name.startswith("mid_block"):
             hidden_size = unet.config.block_out_channels[-1]
         elif name.startswith("up_blocks"):
@@ -666,11 +712,12 @@ def main(args):
             block_id = int(name[len("down_blocks.")])
             hidden_size = unet.config.block_out_channels[block_id]
 
-        cot_attn_procs[name] = COTAttnProcessor(hidden_size=hidden_size, cross_attention_dim=cross_attention_dim, eps=args.eps)
+        cot_attn_procs[name] = COTAttnProcessor(
+            hidden_size=hidden_size, cross_attention_dim=cross_attention_dim, eps=args.eps
+        )
 
     unet.set_attn_processor(cot_attn_procs)
     cot_layers = AttnProcsLayers(unet.attn_processors)
-
 
     # Generate class images if prior preservation is enabled.
     if args.with_prior_preservation:
@@ -717,7 +764,6 @@ def main(args):
             del pipeline
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
-
             '''
             # create pipeline
             pipeline = DiffusionPipeline.from_pretrained(
@@ -824,7 +870,6 @@ def main(args):
 
     accelerator.log({"mean_similarity": mean_similarity}, step=0)
     accelerator.end_training()
-
     '''
     sys.exit()
 
@@ -1129,6 +1174,7 @@ def main(args):
 
     accelerator.end_training()
 '''
+
 
 if __name__ == "__main__":
     args = parse_args()

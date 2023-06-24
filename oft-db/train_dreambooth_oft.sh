@@ -1,5 +1,5 @@
 export MODEL_NAME="runwayml/stable-diffusion-v1-5"
-# export HF_HOME='/tmp'
+export HF_HOME='/tmp'
 
 idx=$1
 prompt_idx=$((idx % 25))
@@ -152,16 +152,23 @@ name="${selected_subject}-${prompt_idx}"
 instance_prompt="a photo of ${unique_token} ${class_token}"
 class_prompt="a photo of ${class_token}"
 
-class_token="man"
-class_prompt="a photo of a bald Caucasian man"
-instance_prompt="a photo of a qwe bald Caucasian man"
-validation_prompt="a qwe bald Caucasian man smiles"
-name="man-0"
-selected_subject="man"
 
-export OUTPUT_DIR="log_cot/${name}"
-export INSTANCE_DIR="../data/dreambooth/${selected_subject}"
+# user defined
+class_token="man"
+unique_token="yuliang"
+template_prompt="high-resolution colored photo of a full-body"
+
+exp_name="${unique_token}-${class_token}-prior"
+class_prompt="${template_prompt} ${class_token}"
+instance_prompt="${template_prompt} ${unique_token} ${class_token}"
+validation_prompt="${instance_prompt} in fashion pose with a white background"
+
+export OUTPUT_DIR="log_cot/${exp_name}"
+export INSTANCE_DIR="../data/dreambooth/${class_token}"
 export CLASS_DIR="data/class_data/${class_token}"
+
+getenv=True
+source /home/yxiu/miniconda3/bin/activate OPT
 
 accelerate launch train_dreambooth_oft.py \
   --pretrained_model_name_or_path=$MODEL_NAME  \
@@ -169,28 +176,30 @@ accelerate launch train_dreambooth_oft.py \
   --class_data_dir="$CLASS_DIR" \
   --output_dir="$OUTPUT_DIR" \
   --instance_prompt="$instance_prompt" \
-  --with_prior_preservation --prior_loss_weight=1.0 \
-  --class_prompt="$class_prompt" \
   --resolution=512 \
-  --train_batch_size=1 \
+  --train_batch_size=5 \
   --gradient_accumulation_steps=1 --gradient_checkpointing \
-  --checkpointing_steps=5000 \
-  --learning_rate=6e-5 \
+  --checkpointing_steps=500 \
+  --learning_rate=1e-6 \
   --report_to="wandb" \
   --lr_scheduler="constant" \
   --lr_warmup_steps=0 \
-  --max_train_steps=1000 \
+  --max_train_steps=2000 \
   --validation_prompt="$validation_prompt" \
-  --validation_epochs=1 \
+  --validation_steps=50 \
+  --num_train_epochs=5 \
   --seed="0" \
-  --name="$name" \
-  --num_class_images=20 \
+  --name="$exp_name" \
   --eps=$eps \
   --rank=$rank \
   --enable_xformers_memory_efficient_attention \
   --use_8bit_adam \
   --set_grads_to_none \
-# --coft
-#   --test_prompt="$test_prompt" \
-#   --eps=6e-5 \
-#  --learning_rate=6e-5 \
+  --num_class_images=200 \
+  --class_prompt="$class_prompt" \
+  --with_prior_preservation --prior_loss_weight=1.0 \
+  --resume_from_checkpoint="checkpoint-1000" \
+  # --coft
+  #   --test_prompt="$test_prompt" \
+  #   --eps=6e-5 \
+  #  --learning_rate=6e-5 \
