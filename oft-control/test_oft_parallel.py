@@ -139,9 +139,10 @@ if __name__ == '__main__':
     model = create_model('./configs/oft_ldm_v15.yaml').cpu()
     model.model.requires_grad_(False)
 
-    # unet_lora_params, train_names = inject_trainable_oft(
-    #     model.model, r=args.r, eps=args.eps, is_coft=args.coft, block_share=args.block_share
-    # )
+    unet_lora_params, train_names = inject_trainable_oft(
+        model.model, r=args.r, eps=args.eps, is_coft=args.coft, block_share=args.block_share
+    )
+    
     # unet_lora_params, train_names = inject_trainable_oft_conv(model.model, r=args.r, eps=args.eps, is_coft=args.coft, block_share=args.block_share)
     # unet_lora_params, train_names = inject_trainable_oft_extended(model.model, r=args.r, eps=args.eps, is_coft=args.coft, block_share=args.block_share)
     # unet_opt_params, train_names = inject_trainable_oft_with_norm(model.model, r=args.r, eps=args.eps, is_coft=args.coft, block_share=args.block_share)
