@@ -55,7 +55,7 @@ from tqdm.auto import tqdm
 from transformers import AutoTokenizer, PretrainedConfig
 
 if is_wandb_available():
-    import wandb
+    import wandb 
 
 # Will error if the minimal version of diffusers is not installed. Remove at your own risks.
 check_min_version("0.16.0.dev0")
@@ -670,6 +670,7 @@ def main(args):
     # Set correct oft layers
     oft_attn_procs = {}
     for name in unet.attn_processors.keys():
+        
         cross_attention_dim = None if name.endswith(
             "attn1.processor"
         ) else unet.config.cross_attention_dim

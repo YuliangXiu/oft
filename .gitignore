@@ -22,5 +22,6 @@ build/
 *.mat
 *.pkl
 *.zip
+*.bin
 
 __pycache__
