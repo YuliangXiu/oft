@@ -454,8 +454,8 @@ class OFTLinearLayer(nn.Module):
         self.in_features = in_features
         self.out_features = out_features
 
-        self.register_buffer('cross_attention_dim', torch.tensor(in_features))
-        self.register_buffer('hidden_size', torch.tensor(out_features))
+        self.register_buffer('cross_attention_dim', in_features.clone().detach())
+        self.register_buffer('hidden_size', out_features.clone().detach())
 
         # Define the fixed Linear layer: v
         # self.OPT = torch.nn.Linear(in_features=in_features, out_features=out_features, bias=bias)

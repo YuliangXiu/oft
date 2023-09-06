@@ -17,7 +17,6 @@ import argparse
 import logging
 import math
 import os
-import shutil
 import sys
 from pathlib import Path
 
@@ -35,13 +34,14 @@ import transformers
 from accelerate import Accelerator
 from accelerate.logging import get_logger
 from accelerate.utils import ProjectConfiguration, set_seed
-from controlnet import ControlNetModel, MyPipeline
 from ctrl_dataset import collate_fn
 from diffusers import (
     AutoencoderKL,
     DDPMScheduler,
     UNet2DConditionModel,
     UniPCMultistepScheduler,
+    ControlNetModel,
+    StableDiffusionControlnetPipeline
 )
 from diffusers.loaders import AttnProcsLayers
 from diffusers.optimization import get_scheduler
@@ -80,7 +80,7 @@ def log_validation(
 ):
     logger.info("Running validation... ")
 
-    pipeline = MyPipeline.from_pretrained(
+    pipeline = StableDiffusionControlnetPipeline.from_pretrained(
         args.pretrained_model_name_or_path,
         vae=vae,
         text_encoder=text_encoder,
@@ -607,12 +607,12 @@ def main(args):
         controlnet = ControlNetModel.from_unet(unet)
 
     vae.requires_grad_(False)
-    unet.requires_grad_(False)
     text_encoder.requires_grad_(False)
+    
+    unet.requires_grad_(True)
     controlnet.requires_grad_(True)
-
-    controlnet.train()
     unet.train()
+    controlnet.train()
 
     # For mixed precision training we cast the text_encoder and vae weights to half-precision
     # as these models are only used for inference, keeping weights in full precision is not required.
@@ -839,6 +839,8 @@ def main(args):
     accelerator.log({"eps": args.eps}, step=0)
     accelerator.log({"rank": args.rank}, step=0)
     accelerator.log({"COFT": 1 if args.coft else 0}, step=0)
+    
+    save_path = ""
 
     for epoch in range(first_epoch, args.num_train_epochs):
         for step, batch in enumerate(train_dataloader):
@@ -951,10 +953,10 @@ def main(args):
     if accelerator.is_main_process:
 
         controlnet = accelerator.unwrap_model(controlnet)
-        controlnet.save_pretrained(args.output_dir)
+        controlnet.save_pretrained(save_path)
 
         unet = unet.to(torch.float32)
-        unet.save_attn_procs(args.output_dir)
+        unet.save_attn_procs(save_path)
 
     accelerator.end_training()
 

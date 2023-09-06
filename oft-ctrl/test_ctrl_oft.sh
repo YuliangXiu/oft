@@ -20,9 +20,9 @@ accelerate launch test_ctrl_oft.py \
  --checkpointing_steps=500 \
  --validation_steps=100 \
  --num_validation_images=12 \
- --num_train_epochs=50 \
+ --num_train_epochs=100 \
  --train_batch_size=8 \
- --controlnet_model_name_or_path="log_cot/controlnet-oft/checkpoint-16000" \
+ --controlnet_model_name_or_path="log_cot/controlnet-oft/checkpoint-32000" \
  --oft_model_name_or_path="../oft-db/log_cot/yuliang-man-prior/checkpoint-2000" \
  --seed="0" \
  --name="$exp_name" \

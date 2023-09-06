@@ -67,7 +67,6 @@ model:
           ch: 128
           ch_mult:
           - 1
-          - 2
           - 4
           - 4
           num_res_blocks: 2

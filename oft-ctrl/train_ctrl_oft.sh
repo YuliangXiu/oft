@@ -19,9 +19,9 @@ accelerate launch train_ctrl_oft.py \
  --checkpointing_steps=500 \
  --validation_steps=100 \
  --num_validation_images=4 \
- --num_train_epochs=50 \
+ --num_train_epochs=100 \
  --train_batch_size=8 \
- --resume_from_checkpoint="latest" \
+ --resume_from_checkpoint="checkpoint-16000" \
  --seed="0" \
  --name="$exp_name" \
  --gradient_accumulation_steps=4 \
